@@ -37,6 +37,28 @@ def spec_to_docx(spec: dict[str, Any]) -> bytes:
                 parts.append(f"{k}: {v}")
         ph.add_run(", ".join(parts) if parts else "—")
 
+    assets = meta.get("stimulus_assets")
+    if isinstance(assets, dict) and assets:
+        doc.add_paragraph()
+        ah = doc.add_paragraph()
+        ah.add_run("Ссылки на стимулы (из конструктора): ").bold = True
+        for key, rows in assets.items():
+            if not isinstance(rows, list):
+                continue
+            for i, row in enumerate(rows, start=1):
+                if isinstance(row, dict):
+                    url = (row.get("url") or "").strip()
+                    lab = (row.get("label") or "").strip()
+                else:
+                    url = str(row or "").strip()
+                    lab = ""
+                if not url:
+                    continue
+                line = f"{key} #{i}: {url}"
+                if lab:
+                    line += f" ({lab})"
+                doc.add_paragraph(line, style="List Bullet")
+
     cn = (meta.get("client_notes") or "").strip()
     if cn:
         doc.add_paragraph()
@@ -90,6 +112,11 @@ def spec_to_docx(spec: dict[str, Any]) -> bytes:
                 sg = doc.add_paragraph()
                 sg.add_run("Привязка к стимулу: ").bold = True
                 sg.add_run(f"{st.get('type')} #{st.get('index')}")
+                au = (st.get("asset_url") or "").strip()
+                if au:
+                    al = doc.add_paragraph()
+                    al.add_run("URL медиа: ").italic = True
+                    al.add_run(au)
 
         doc.add_paragraph()
 

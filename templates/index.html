@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="api-prefix" content="{{ request.script_root or '' }}">
   <title>Конструктор анкет — тесты креативов</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=3">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=4">
 </head>
 <body>
   <div class="wrap">
@@ -58,19 +58,22 @@
         </div>
       </div>
       <p class="hint" style="margin-top:1rem">Минимум один тип материала с количеством &gt; 0, иначе собрать анкету нельзя.</p>
+      <h3 class="subh">Ссылки на стимулы (картинки / превью)</h3>
+      <p class="hint">Для каждого номера стимула можно указать URL или загрузить файл — ссылка попадёт в спецификацию и в DOCX для программистов. Видеоролики обычно ведут на хостинг; для макетов — превью-картинка.</p>
+      <div id="stimAssetRows"></div>
     </section>
 
     <!-- Шаг 3 -->
     <section class="panel step hidden" data-step="3">
       <h2>3. Типовые показатели</h2>
-      <p class="hint">Список сформирован по выбранным материалам и этапу. Снимите галочки с ненужных блоков или оставьте как есть.</p>
+      <p class="hint">Блоки раскрываются по заголовку. Галочка у группы включает весь блок; внутри можно снять отдельные вопросы. Скрининг обязателен целиком. Если в анкете есть ролики, вопрос про дебрендированный <em>макет</em> автоматически не включается (остаётся один вопрос про дебренд по ролику).</p>
       <div id="groupChecks" class="chk-list"></div>
     </section>
 
     <!-- Шаг 4 -->
     <section class="panel step hidden" data-step="4">
       <h2>4. Дополнительно</h2>
-      <p class="hint">Опциональные блоки (клик-тест, recall и т.д.) — только если есть подходящие материалы.</p>
+      <p class="hint">Опциональные блоки (клик-тест, recall и т.д.) — только если есть подходящие материалы. Блок можно включить целиком и при необходимости снять отдельные вопросы внутри (если их несколько).</p>
       <div id="extraChecks" class="chk-list"></div>
       <label class="lbl" for="freeNotes">Свободные пожелания заказчика</label>
       <textarea id="freeNotes" placeholder="Например: добавить вопрос про готовность скачать приложение; разделить показ макетов на два экрана…"></textarea>
@@ -93,6 +96,6 @@
       <button type="button" class="primary" id="btnNext">Далее</button>
     </div>
   </div>
-  <script src="{{ url_for('static', filename='app.js') }}?v=3" defer></script>
+  <script src="{{ url_for('static', filename='app.js') }}?v=4" defer></script>
 </body>
 </html>

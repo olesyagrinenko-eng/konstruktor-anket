@@ -15,8 +15,20 @@
   let catalog = null;
   let selectedGroups = new Set();
   let selectedExtras = new Set();
+  /** @type {Map<string, Set<string>>} */
+  let selectedTemplates = new Map();
+  /** @type {Map<string, Set<string>>} */
+  let selectedExtraTemplates = new Map();
   /** @type {object | null} */
   let currentSpec = null;
+
+  const STIMULUS_TYPES = [
+    ["video", "cVideo", "Ролик"],
+    ["layout", "cLayout", "Макет"],
+    ["scenario", "cScenario", "Сценарий"],
+    ["concept", "cConcept", "Концепция"],
+    ["packaging", "cPack", "Упаковка"],
+  ];
 
   const $ = (s, r = document) => r.querySelector(s);
   const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
@@ -73,15 +85,160 @@
     return fs.some((s) => act.has(s));
   }
 
+  function groupAllTids(g) {
+    return (g.templates || []).map((t) => t.tid).filter(Boolean);
+  }
+
+  function mergeTemplateMapForGroup(gid, allTids) {
+    const prev = selectedTemplates.get(gid);
+    const allowed = new Set(allTids);
+    if (!prev) {
+      selectedTemplates.set(gid, new Set(allTids));
+      return;
+    }
+    const next = new Set();
+    prev.forEach((t) => {
+      if (allowed.has(t)) next.add(t);
+    });
+    if (next.size === 0) allTids.forEach((t) => next.add(t));
+    selectedTemplates.set(gid, next);
+  }
+
+  function snapshotAssetFields() {
+    const snap = {};
+    $$("[id^='asset_']").forEach((el) => {
+      if (el.id) snap[el.id] = el.value;
+    });
+    return snap;
+  }
+
+  function applyAssetSnapshot(snap) {
+    Object.keys(snap).forEach((id) => {
+      const el = document.getElementById(id);
+      if (el) el.value = snap[id];
+    });
+  }
+
+  function collectStimulusAssets() {
+    const c = getCounts();
+    const out = {
+      video: [],
+      layout: [],
+      scenario: [],
+      concept: [],
+      packaging: [],
+    };
+    STIMULUS_TYPES.forEach(([key, cid]) => {
+      const n = numVal(cid);
+      for (let i = 1; i <= n; i++) {
+        const urlEl = document.getElementById(`asset_${key}_${i}_url`);
+        const labEl = document.getElementById(`asset_${key}_${i}_label`);
+        const url = urlEl ? urlEl.value.trim() : "";
+        const label = labEl ? labEl.value.trim() : "";
+        out[key].push({ url, label });
+      }
+    });
+    return out;
+  }
+
+  async function uploadStimulusFile(file, urlInput) {
+    const fd = new FormData();
+    fd.append("file", file);
+    const r = await fetch(apiUrl("/api/upload-stimulus"), {
+      method: "POST",
+      body: fd,
+      credentials: "same-origin",
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      throw new Error(j.error || `Загрузка файла: код ${r.status}`);
+    }
+    if (j.url) urlInput.value = j.url;
+  }
+
+  function renderStimulusAssetFields() {
+    const host = $("#stimAssetRows");
+    if (!host) return;
+    const snap = snapshotAssetFields();
+    host.innerHTML = "";
+    const c = getCounts();
+    let any = false;
+    STIMULUS_TYPES.forEach(([key, cid, title]) => {
+      const n = numVal(cid);
+      if (n < 1) return;
+      any = true;
+      const block = document.createElement("div");
+      block.className = "stim-asset-block";
+      const h = document.createElement("h4");
+      h.textContent = `${title} — ссылка или файл на каждый стимул`;
+      block.appendChild(h);
+      for (let i = 1; i <= n; i++) {
+        const row = document.createElement("div");
+        row.className = "stim-asset-row";
+        const uwrap = document.createElement("div");
+        uwrap.innerHTML =
+          `<span class="lbl-mini">URL картинки / превью (#${i})</span>` +
+          `<input type="url" id="asset_${key}_${i}_url" placeholder="https://…" class="wide">`;
+        const lwrap = document.createElement("div");
+        lwrap.innerHTML =
+          `<span class="lbl-mini">Подпись для ТЗ (необязательно)</span>` +
+          `<input type="text" id="asset_${key}_${i}_label" placeholder="Например: вариант А" class="wide">`;
+        const fwrap = document.createElement("div");
+        const fl = document.createElement("input");
+        fl.type = "file";
+        fl.accept = "image/*";
+        fl.className = "stim-file-inp";
+        const urlInp = uwrap.querySelector("input");
+        fl.addEventListener("change", () => {
+          const f = fl.files && fl.files[0];
+          if (!f) return;
+          uploadStimulusFile(f, urlInp).catch((e) => showErr(e.message || "Ошибка загрузки"));
+          fl.value = "";
+        });
+        fwrap.appendChild(document.createTextNode("или файл: "));
+        fwrap.appendChild(fl);
+        row.appendChild(uwrap);
+        row.appendChild(lwrap);
+        row.appendChild(fwrap);
+        block.appendChild(row);
+      }
+      host.appendChild(block);
+    });
+    if (!any) {
+      host.innerHTML = '<p class="hint">Увеличьте количество материалов выше, чтобы появились поля для ссылок.</p>';
+    } else {
+      applyAssetSnapshot(snap);
+    }
+  }
+
   function buildPayload() {
     const pn = $("#projectName");
     const fn = $("#freeNotes");
+    const template_selection = {};
+    selectedGroups.forEach((gid) => {
+      const s = selectedTemplates.get(gid);
+      template_selection[gid] = s ? Array.from(s) : [];
+    });
+    const extra_template_selection = {};
+    selectedExtras.forEach((eid) => {
+      const s = selectedExtraTemplates.get(eid);
+      extra_template_selection[eid] = s ? Array.from(s) : [];
+    });
+    const visibleExtra = new Set(
+      (catalog && catalog.extra_options ? catalog.extra_options : [])
+        .filter((e) => extraVisibleById(e))
+        .map((e) => e.id)
+    );
+    const extra_ids = Array.from(selectedExtras).filter((id) => visibleExtra.has(id));
     return {
       project_name: pn ? pn.value.trim() : "",
       phase: getPhase(),
       counts: getCounts(),
       group_ids: Array.from(selectedGroups),
-      extra_ids: Array.from(selectedExtras),
+      extra_ids,
+      template_selection,
+      extra_template_selection,
+      stimulus_assets: collectStimulusAssets(),
       client_notes: fn ? fn.value.trim() : "",
       custom_questions: [],
     };
@@ -120,15 +277,27 @@
       next.classList.toggle("hidden", n === STEPS);
       next.textContent = n === 4 ? "Собрать и перейти к структуре" : "Далее";
     }
-    // Шаги 3–4: всегда перезаполняем списки (в т.ч. при клике по номеру шага в навигации)
-    if (n === 3 || n === 4) {
+    if (n === 2) {
+      renderStimulusAssetFields();
+    }
+    if (n === 3) {
       try {
-        await refreshGroupSelectors();
+        await refreshIndicatorPanel();
       } catch (e) {
         console.error(e);
         showErr(
           "Не удалось загрузить показатели. Проверьте соединение и обновите страницу. " +
             (e.message || "")
+        );
+      }
+    }
+    if (n === 4) {
+      try {
+        await refreshExtrasPanel();
+      } catch (e) {
+        console.error(e);
+        showErr(
+          "Не удалось загрузить доп. блоки. " + (e.message || "")
         );
       }
     }
@@ -139,6 +308,19 @@
     const t = Object.values(c).reduce((s, x) => s + x, 0);
     if (t < 1) {
       showErr("Укажите хотя бы один материал с количеством больше 0.");
+      return false;
+    }
+    return true;
+  }
+
+  function validateStep3() {
+    let ok = false;
+    selectedGroups.forEach((gid) => {
+      const s = selectedTemplates.get(gid);
+      if (s && s.size > 0) ok = true;
+    });
+    if (!ok) {
+      showErr("Отметьте хотя бы один вопрос в типовых показателях (скрининг нельзя отключить полностью).");
       return false;
     }
     return true;
@@ -163,15 +345,27 @@
     return fs.some((s) => act.has(s));
   }
 
-  async function refreshGroupSelectors() {
-    if (!catalog) {
-      await loadCatalog();
-    }
-    const payload = buildPayload();
+  function updateGroupMasterState(gid, masterCb) {
+    const tids = groupAllTids(catalog.indicator_groups.find((x) => x.id === gid) || { templates: [] });
+    const set = selectedTemplates.get(gid) || new Set();
+    const n = tids.length;
+    const c = tids.filter((t) => set.has(t)).length;
+    masterCb.checked = c > 0;
+    masterCb.indeterminate = c > 0 && c < n;
+  }
+
+  async function refreshIndicatorPanel() {
+    if (!catalog) await loadCatalog();
+    const payloadBase = {
+      project_name: ($("#projectName") && $("#projectName").value.trim()) || "",
+      phase: getPhase(),
+      counts: getCounts(),
+      client_notes: ($("#freeNotes") && $("#freeNotes").value.trim()) || "",
+    };
     const sug = await fetch(apiUrl("/api/suggest-groups"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
+      body: JSON.stringify(payloadBase),
       credentials: "same-origin",
     });
     if (!sug.ok) {
@@ -182,60 +376,212 @@
     if (Array.isArray(gids)) {
       selectedGroups = new Set(gids);
     }
+    selectedGroups.add("screening_base");
+    Array.from(selectedGroups).forEach((gid) => {
+      const g = catalog.indicator_groups.find((x) => x.id === gid);
+      if (!g || !groupVisible(g)) {
+        selectedGroups.delete(gid);
+        selectedTemplates.delete(gid);
+      }
+    });
 
-    const host = $("#groupChecks");
-    const exh = $("#extraChecks");
-    if (!host || !exh) return;
-
-    host.innerHTML = "";
+    const prevKeys = new Set(selectedTemplates.keys());
     catalog.indicator_groups.forEach((g) => {
       if (!groupVisible(g)) return;
-      const lab = document.createElement("label");
-      const cb = document.createElement("input");
-      cb.type = "checkbox";
-      cb.value = g.id;
+      if (!selectedGroups.has(g.id)) return;
+      const allT = groupAllTids(g);
+      mergeTemplateMapForGroup(g.id, allT);
+      prevKeys.delete(g.id);
+    });
+    prevKeys.forEach((k) => selectedTemplates.delete(k));
+
+    const host = $("#groupChecks");
+    if (!host) return;
+    host.innerHTML = "";
+
+    catalog.indicator_groups.forEach((g) => {
+      if (!groupVisible(g)) return;
       const locked = g.id === "screening_base";
+      if (locked) selectedGroups.add("screening_base");
+
+      const det = document.createElement("details");
+      det.className = "tpl-details";
+      det.open = true;
+
+      const sum = document.createElement("summary");
+      const master = document.createElement("input");
+      master.type = "checkbox";
+      master.className = "grp-master";
       if (locked) {
-        selectedGroups.add("screening_base");
-        cb.checked = true;
-        cb.disabled = true;
+        master.checked = true;
+        master.disabled = true;
       } else {
-        cb.checked = selectedGroups.has(g.id);
+        master.checked = selectedGroups.has(g.id);
+        master.addEventListener("change", () => {
+          if (master.checked) {
+            selectedGroups.add(g.id);
+            selectedTemplates.set(g.id, new Set(groupAllTids(g)));
+          } else {
+            selectedGroups.delete(g.id);
+            selectedTemplates.delete(g.id);
+          }
+          det.querySelectorAll(".tpl-cb").forEach((cb) => {
+            if (!cb.disabled) {
+              cb.checked = master.checked;
+            }
+          });
+          master.indeterminate = false;
+        });
       }
-      cb.addEventListener("change", () => {
-        if (cb.disabled) return;
-        if (cb.checked) selectedGroups.add(g.id);
-        else selectedGroups.delete(g.id);
+
+      const st = document.createElement("div");
+      st.className = "tpl-summary-text";
+      st.innerHTML = `<strong>${escapeHtml(g.label)}</strong><small>${escapeHtml(g.description)}</small>`;
+      sum.appendChild(master);
+      sum.appendChild(st);
+      det.appendChild(sum);
+
+      const list = document.createElement("div");
+      list.className = "tpl-list";
+      const tlist = g.templates || [];
+      if (!tlist.length) {
+        list.innerHTML = '<span class="hint">Нет шаблонов в каталоге.</span>';
+      }
+      tlist.forEach((t) => {
+        const lab = document.createElement("label");
+        const cb = document.createElement("input");
+        cb.type = "checkbox";
+        cb.className = "tpl-cb";
+        cb.dataset.tid = t.tid;
+        const set = selectedTemplates.get(g.id) || new Set();
+        const isOn = set.has(t.tid);
+        cb.checked = locked ? true : isOn;
+        if (locked) cb.disabled = true;
+        cb.addEventListener("change", () => {
+          if (locked) return;
+          let s = selectedTemplates.get(g.id) || new Set();
+          if (cb.checked) s.add(t.tid);
+          else s.delete(t.tid);
+          if (s.size === 0) {
+            selectedGroups.delete(g.id);
+            selectedTemplates.delete(g.id);
+            master.checked = false;
+            master.indeterminate = false;
+          } else {
+            selectedGroups.add(g.id);
+            selectedTemplates.set(g.id, s);
+            updateGroupMasterState(g.id, master);
+          }
+        });
+        lab.appendChild(cb);
+        const tx = document.createElement("span");
+        const rp = t.repeat_per ? `Повтор: ${t.repeat_per}` : "Один раз на блок";
+        let de = "";
+        if (t.layout_debrand_open) {
+          de =
+            " При наличии роликов в анкете этот вопрос про дебренд по макету не включается (остаётся один вопрос про дебренд: по ролику).";
+        }
+        tx.innerHTML = `${escapeHtml(t.text || "")}<div class="tpl-meta">${escapeHtml(rp)} · ${escapeHtml(t.qtype || "")}${escapeHtml(de)}</div>`;
+        lab.appendChild(tx);
+        list.appendChild(lab);
       });
-      lab.appendChild(cb);
-      const span = document.createElement("span");
-      span.innerHTML = `<strong>${escapeHtml(g.label)}</strong><small>${escapeHtml(g.description)}</small>`;
-      lab.appendChild(span);
-      host.appendChild(lab);
+      det.appendChild(list);
+      host.appendChild(det);
+
+      if (!locked) {
+        updateGroupMasterState(g.id, master);
+      }
     });
 
     if (!host.children.length) {
       host.innerHTML =
         '<p class="chk-empty">Нет групп для текущих материалов. Вернитесь на шаг 2 и укажите хотя бы один стимул.</p>';
     }
+  }
 
+  async function refreshExtrasPanel() {
+    if (!catalog) await loadCatalog();
+    const exh = $("#extraChecks");
+    if (!exh) return;
     exh.innerHTML = "";
+
     catalog.extra_options.forEach((e) => {
       if (!extraVisibleById(e)) return;
-      const lab = document.createElement("label");
-      const cb = document.createElement("input");
-      cb.type = "checkbox";
-      cb.value = e.id;
-      cb.checked = selectedExtras.has(e.id);
-      cb.addEventListener("change", () => {
-        if (cb.checked) selectedExtras.add(e.id);
-        else selectedExtras.delete(e.id);
+      const tlist = e.templates || [];
+      const det = document.createElement("details");
+      det.className = "tpl-details";
+      det.open = true;
+
+      const sum = document.createElement("summary");
+      const master = document.createElement("input");
+      master.type = "checkbox";
+      master.checked = selectedExtras.has(e.id);
+      master.addEventListener("change", () => {
+        if (master.checked) {
+          selectedExtras.add(e.id);
+          if (!selectedExtraTemplates.has(e.id)) {
+            selectedExtraTemplates.set(e.id, new Set(tlist.map((t) => t.tid).filter(Boolean)));
+          }
+        } else {
+          selectedExtras.delete(e.id);
+          selectedExtraTemplates.delete(e.id);
+        }
+        det.querySelectorAll(".tpl-cb-extra").forEach((cb) => {
+          if (!cb.disabled) cb.checked = master.checked;
+        });
+        master.indeterminate = false;
       });
-      lab.appendChild(cb);
-      const span = document.createElement("span");
-      span.innerHTML = `<strong>${escapeHtml(e.label)}</strong><small>${escapeHtml(e.hint)}</small>`;
-      lab.appendChild(span);
-      exh.appendChild(lab);
+
+      const st = document.createElement("div");
+      st.className = "tpl-summary-text";
+      st.innerHTML = `<strong>${escapeHtml(e.label)}</strong><small>${escapeHtml(e.hint)}</small>`;
+      sum.appendChild(master);
+      sum.appendChild(st);
+      det.appendChild(sum);
+
+      const list = document.createElement("div");
+      list.className = "tpl-list";
+
+      if (master.checked && !selectedExtraTemplates.has(e.id)) {
+        selectedExtraTemplates.set(e.id, new Set(tlist.map((t) => t.tid).filter(Boolean)));
+      }
+
+      tlist.forEach((t) => {
+        const lab = document.createElement("label");
+        const cb = document.createElement("input");
+        cb.type = "checkbox";
+        cb.className = "tpl-cb-extra";
+        cb.dataset.tid = t.tid;
+        const set = selectedExtraTemplates.get(e.id) || new Set();
+        cb.checked = selectedExtras.has(e.id) && set.has(t.tid);
+        const onlyOne = tlist.length === 1;
+        if (onlyOne) cb.disabled = true;
+        cb.addEventListener("change", () => {
+          let s = selectedExtraTemplates.get(e.id) || new Set();
+          if (cb.checked) s.add(t.tid);
+          else s.delete(t.tid);
+          if (s.size === 0) {
+            selectedExtras.delete(e.id);
+            selectedExtraTemplates.delete(e.id);
+            master.checked = false;
+          } else {
+            selectedExtras.add(e.id);
+            selectedExtraTemplates.set(e.id, s);
+            master.checked = true;
+            const all = tlist.map((x) => x.tid).filter(Boolean);
+            const on = all.filter((tid) => s.has(tid)).length;
+            master.indeterminate = on > 0 && on < all.length;
+          }
+        });
+        lab.appendChild(cb);
+        const tx = document.createElement("span");
+        const rp = t.repeat_per ? `Повтор: ${t.repeat_per}` : "Один раз на блок";
+        tx.innerHTML = `${escapeHtml(t.text || "")}<div class="tpl-meta">${escapeHtml(rp)} · ${escapeHtml(t.qtype || "")}</div>`;
+        lab.appendChild(tx);
+        list.appendChild(lab);
+      });
+      det.appendChild(list);
+      exh.appendChild(det);
     });
 
     if (!exh.children.length) {
@@ -318,9 +664,11 @@
         let typeOpts = Q_TYPES.map(
           ([v, l]) => `<option value="${v}" ${q.qtype === v ? "selected" : ""}>${l}</option>`
         ).join("");
+        const st = q.stimulus;
+        const surl = st && st.asset_url ? escapeHtml(st.asset_url) : "";
         html += `<tr data-bid="${escapeHtml(block.id)}" data-qidx="${qi}">
           <td><code>${escapeHtml(q.id)}</code></td>
-          <td><textarea class="f-text">${escapeHtml(q.text)}</textarea></td>
+          <td><textarea class="f-text">${escapeHtml(q.text)}</textarea>${surl ? `<div class="tpl-meta">Медиа: ${surl}</div>` : ""}</td>
           <td><select class="f-type">${typeOpts}</select></td>
           <td><textarea class="f-opts" rows="2">${escapeHtml(opts)}</textarea></td>
           <td><input type="text" class="f-anch" value="${escapeHtml(anch)}"></td>
@@ -366,8 +714,6 @@
   async function runBuild() {
     showErr("");
     const payload = buildPayload();
-    payload.group_ids = Array.from(selectedGroups);
-    payload.extra_ids = Array.from(selectedExtras);
     const r = await fetch(apiUrl("/api/build"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -449,6 +795,15 @@
 
     renderStepNav();
 
+    STIMULUS_TYPES.forEach(([, cid]) => {
+      const el = document.getElementById(cid);
+      if (el) {
+        el.addEventListener("input", () => {
+          if (step === 2) renderStimulusAssetFields();
+        });
+      }
+    });
+
     const btnNext = $("#btnNext");
     if (btnNext) {
       btnNext.addEventListener("click", async () => {
@@ -464,6 +819,7 @@
             return;
           }
           if (step === 3) {
+            if (!validateStep3()) return;
             await goStep(4);
             return;
           }

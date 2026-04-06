@@ -53,6 +53,13 @@ header.page p {
   border-left: 6px solid transparent;
 }
 
+.subh {
+  margin: 1.25rem 0 0.35rem;
+  font-size: 1rem;
+  font-weight: 700;
+  color: #0a5f7a;
+}
+
 .steps {
   display: flex;
   flex-wrap: wrap;
@@ -332,4 +339,100 @@ table.spec textarea { min-height: 48px; }
   font-size: 1.2rem;
   line-height: 1;
   min-width: 2.25rem;
+}
+
+/* Раскрываемые группы показателей / доп. блоков */
+.tpl-details {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.35rem 0.75rem 0.65rem;
+  margin-bottom: 0.65rem;
+  background: var(--card);
+}
+
+.tpl-details > summary {
+  cursor: pointer;
+  font-weight: 600;
+  list-style: none;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  padding: 0.25rem 0;
+}
+
+.tpl-details > summary::-webkit-details-marker {
+  display: none;
+}
+
+.tpl-details .tpl-summary-text {
+  flex: 1;
+}
+
+.tpl-details .tpl-summary-text small {
+  display: block;
+  font-weight: 400;
+  color: var(--muted);
+  margin-top: 0.15rem;
+}
+
+.tpl-list {
+  margin: 0.5rem 0 0 1.6rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.tpl-list label {
+  display: flex;
+  gap: 0.45rem;
+  align-items: flex-start;
+  font-size: 0.88rem;
+  line-height: 1.35;
+}
+
+.tpl-list label input {
+  margin-top: 0.2rem;
+  flex-shrink: 0;
+}
+
+.tpl-meta {
+  font-size: 0.75rem;
+  color: var(--muted);
+  margin-top: 0.15rem;
+}
+
+/* Стимулы: ссылка / файл */
+.stim-asset-block {
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+  padding: 0.65rem 0.75rem;
+  margin-bottom: 0.5rem;
+  background: linear-gradient(135deg, var(--accent-sand-dim), transparent 55%);
+}
+
+.stim-asset-block h4 {
+  margin: 0 0 0.5rem;
+  font-size: 0.9rem;
+  color: #6b4a2a;
+}
+
+.stim-asset-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  gap: 0.5rem;
+  align-items: end;
+  margin-bottom: 0.45rem;
+}
+
+@media (max-width: 720px) {
+  .stim-asset-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+.stim-asset-row .lbl-mini {
+  font-size: 0.78rem;
+  color: var(--muted);
+  margin-bottom: 0.15rem;
+  display: block;
 }

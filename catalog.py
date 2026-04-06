@@ -9,9 +9,20 @@ STIMULUS_LABELS = {
     "packaging": "Упаковка",
 }
 
+def _with_template_ids(group: dict) -> dict:
+    """Добавить уникальный tid каждому шаблону: {group_id}__{n}."""
+    gid = group["id"]
+    out = {**group, "templates": []}
+    for i, t in enumerate(group.get("templates") or []):
+        t2 = {**t, "tid": f"{gid}__{i}"}
+        out["templates"].append(t2)
+    return out
+
+
 # id группы -> метаданные и список шаблонов вопросов
 # templates: repeat_per = "video"|"layout"|"scenario"|"concept"|"packaging" | None (один раз на анкету в блоке «общее»)
-INDICATOR_GROUPS = [
+# layout_debrand_open: если в анкете есть ролики — этот шаблон не показывать (один вопрос про дебренд: ролик ИЛИ макет)
+_RAW_INDICATOR_GROUPS = [
     {
         "id": "screening_base",
         "label": "Скрининг и соц-дем",
@@ -234,6 +245,7 @@ INDICATOR_GROUPS = [
                 "qtype": "open",
                 "text": "Что именно рекламируется на этом плакате? (краткий показ дебрендированного варианта, если по дизайну волны)",
                 "prog_note": "Порядок дебренд → бренд — по ТЗ; время показа (напр. 5 сек) задать в скрипте.",
+                "layout_debrand_open": True,
             },
             {
                 "repeat_per": "layout",
@@ -501,7 +513,19 @@ INDICATOR_GROUPS = [
     },
 ]
 
-EXTRA_OPTIONS = [
+INDICATOR_GROUPS = [_with_template_ids(g) for g in _RAW_INDICATOR_GROUPS]
+
+
+def _extra_with_tids(extra: dict) -> dict:
+    inj = dict(extra.get("inject") or {})
+    tpls = []
+    for i, t in enumerate(inj.get("templates") or []):
+        tpls.append({**t, "tid": f"{extra['id']}__{i}"})
+    inj["templates"] = tpls
+    return {**extra, "inject": inj}
+
+
+_RAW_EXTRA_OPTIONS = [
     {
         "id": "click_test",
         "label": "Клик-тест (зоны внимания на макете)",
@@ -590,6 +614,8 @@ EXTRA_OPTIONS = [
         },
     },
 ]
+
+EXTRA_OPTIONS = [_extra_with_tids(e) for e in _RAW_EXTRA_OPTIONS]
 
 
 def group_applies(group, phase: str, active_stimuli: set) -> bool:

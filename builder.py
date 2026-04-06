@@ -25,6 +25,22 @@ def _make_qid(prefix: str, idx: int) -> str:
     return f"{prefix}_{idx:03d}"
 
 
+def _asset_url_for_stimulus(assets: dict | None, stimulus_type: str, index: int) -> str | None:
+    if not assets or not stimulus_type or index < 1:
+        return None
+    arr = assets.get(stimulus_type)
+    if not isinstance(arr, list) or index > len(arr):
+        return None
+    item = arr[index - 1]
+    if isinstance(item, dict):
+        u = (item.get("url") or "").strip()
+        return u or None
+    if isinstance(item, str):
+        u = item.strip()
+        return u or None
+    return None
+
+
 def instantiate_template(
     tpl: dict,
     *,
@@ -32,6 +48,7 @@ def instantiate_template(
     stimulus_index: int | None,
     block_prefix: str,
     q_index: list,  # mutable counter [0]
+    asset_url: str | None = None,
 ) -> dict:
     """Один экземпляр вопроса из шаблона."""
     q_index[0] += 1
@@ -41,7 +58,7 @@ def instantiate_template(
         label = STIMULUS_LABELS.get(stimulus_type, stimulus_type)
         text = f"[{label} #{stimulus_index}] {text}"
 
-    q = {
+    q: dict[str, Any] = {
         "id": sid,
         "qtype": tpl.get("qtype", "open"),
         "text": text,
@@ -51,7 +68,10 @@ def instantiate_template(
         "stimulus": None,
     }
     if stimulus_type is not None and stimulus_index is not None:
-        q["stimulus"] = {"type": stimulus_type, "index": stimulus_index}
+        st: dict[str, Any] = {"type": stimulus_type, "index": stimulus_index}
+        if asset_url:
+            st["asset_url"] = asset_url
+        q["stimulus"] = st
     return q
 
 
@@ -60,6 +80,8 @@ def expand_templates_for_repeat(
     counts: dict[str, int],
     block_prefix: str,
     q_index: list,
+    *,
+    stimulus_assets: dict | None = None,
 ) -> list[dict]:
     """Размножить шаблон по числу стимулов нужного типа."""
     rp = tpl.get("repeat_per")
@@ -77,6 +99,7 @@ def expand_templates_for_repeat(
         return out
     n = counts.get(rp, 0)
     for i in range(1, n + 1):
+        au = _asset_url_for_stimulus(stimulus_assets, rp, i)
         out.append(
             instantiate_template(
                 tpl,
@@ -84,22 +107,154 @@ def expand_templates_for_repeat(
                 stimulus_index=i,
                 block_prefix=block_prefix,
                 q_index=q_index,
+                asset_url=au,
             )
         )
     return out
 
 
+def _resolve_group_templates(
+    group: dict,
+    active: set[str],
+    counts: dict[str, int],
+    template_selection: dict[str, list[str]] | None,
+) -> list[dict]:
+    """Учитывает выбор шаблонов и правило: при наличии роликов не показывать дебренд-открытый по макету."""
+    base = collect_templates_for_group(group, active)
+    if not base:
+        return []
+    gid = group["id"]
+    sel = (template_selection or {}).get(gid)
+    if sel is None:
+        chosen = base
+    elif not sel:
+        if gid == "screening_base":
+            chosen = base
+        else:
+            chosen = []
+    else:
+        sset = set(sel)
+        chosen = [t for t in base if t.get("tid") in sset]
+    if counts.get("video", 0) > 0:
+        chosen = [t for t in chosen if not t.get("layout_debrand_open")]
+    return chosen
+
+
+def _resolve_extra_templates(
+    extra: dict,
+    active: set[str],
+    extra_template_selection: dict[str, list[str]] | None,
+) -> list[dict]:
+    inj = extra.get("inject") or {}
+    fs = set(inj.get("for_stimuli") or [])
+    if fs and not (fs & active):
+        return []
+    base = list(inj.get("templates") or [])
+    if not base:
+        return []
+    eid = extra["id"]
+    sel = (extra_template_selection or {}).get(eid)
+    if sel is None:
+        return base
+    if not sel:
+        return []
+    sset = set(sel)
+    return [t for t in base if t.get("tid") in sset]
+
+
+def _build_indicator_block(
+    group: dict,
+    *,
+    phase: str,
+    active: set[str],
+    counts: dict[str, int],
+    template_selection: dict[str, list[str]] | None,
+    q_global: list,
+    stimulus_assets: dict | None,
+) -> dict | None:
+    if not group_applies(group, phase, active):
+        return None
+    templates = _resolve_group_templates(group, active, counts, template_selection)
+    if not templates:
+        return None
+    bp = f"q_{_slug(group['id'])}"
+    block: dict[str, Any] = {
+        "id": f"blk_{group['id']}",
+        "title": group["label"],
+        "programmer_instructions": group.get("description") or "",
+        "questions": [],
+    }
+    for tpl in templates:
+        block["questions"].extend(
+            expand_templates_for_repeat(
+                tpl, counts, bp, q_global, stimulus_assets=stimulus_assets
+            )
+        )
+    if not block["questions"]:
+        return None
+    return block
+
+
+def _build_extra_block(
+    extra: dict,
+    *,
+    active: set[str],
+    counts: dict[str, int],
+    extra_template_selection: dict[str, list[str]] | None,
+    q_global: list,
+    stimulus_assets: dict | None,
+) -> dict | None:
+    templates = _resolve_extra_templates(extra, active, extra_template_selection)
+    if not templates:
+        return None
+    bp = f"q_extra_{extra['id']}"
+    block: dict[str, Any] = {
+        "id": f"blk_extra_{extra['id']}",
+        "title": f"Дополнительно: {extra['label']}",
+        "programmer_instructions": extra.get("hint") or "",
+        "questions": [],
+    }
+    for tpl in templates:
+        block["questions"].extend(
+            expand_templates_for_repeat(
+                tpl, counts, bp, q_global, stimulus_assets=stimulus_assets
+            )
+        )
+    if not block["questions"]:
+        return None
+    return block
+
+
+def _rotation_and_same_questions_notes(counts: dict[str, int]) -> str:
+    parts: list[str] = []
+    for key, n in counts.items():
+        if int(n or 0) <= 1:
+            continue
+        label = STIMULUS_LABELS.get(key, key)
+        parts.append(
+            f"{label}: в анкете {n} стимулов — задать ротацию порядка показа и/или балансировку по квотам "
+            f"(каждый респондент видит все или подмножество — по ТЗ проекта и возможностям панели)."
+        )
+    rot = " ".join(parts) if parts else ""
+    same = (
+        "Одинаковые формулировки вопросов для разных макетов/роликов: для каждого номера стимула "
+        "([Макет #k], [Ролик #k] и т.д.) повторяется один и тот же блок шкал и открытых вопросов; "
+        "в базе завести отдельные переменные на каждый k или цикл по списку креативов — по правилам платформы."
+    )
+    if rot:
+        return rot + " " + same
+    return same
+
+
 def build_questionnaire(payload: dict) -> dict[str, Any]:
     """
     payload:
-      project_name: str
-      phase: 'pre' | 'post'
-      has_separate_scenario: bool  # сценарий как отдельный носитель (не только внутри концепции)
-      has_concept_package: bool   # концепция = несколько носителей
-      counts: { video, layout, scenario, concept, packaging } int
-      group_ids: list[str]  # выбранные группы показателей
-      extra_ids: list[str]
-      custom_blocks: optional list of extra questions from UI
+      project_name, phase, counts, group_ids, extra_ids,
+      template_selection: { group_id: [tid, ...] } — если ключа нет, берутся все шаблоны группы;
+        пустой список (кроме screening_base) — группа не попадает в анкету.
+      extra_template_selection: { extra_id: [tid, ...] } — аналогично для доп. блоков.
+      stimulus_assets: { video|layout|...: [ {url, label?}, ... ] }
+      custom_questions, client_notes
     """
     phase = payload.get("phase") or "pre"
     counts = {
@@ -109,7 +264,6 @@ def build_questionnaire(payload: dict) -> dict[str, Any]:
         "concept": max(0, int(payload.get("counts", {}).get("concept") or 0)),
         "packaging": max(0, int(payload.get("counts", {}).get("packaging") or 0)),
     }
-    # Активные типы стимулов для фильтрации групп (только по количеству материалов)
     active: set[str] = set()
     if counts["video"] > 0:
         active.add("video")
@@ -127,81 +281,106 @@ def build_questionnaire(payload: dict) -> dict[str, Any]:
         selected_groups = set(raw_groups)
     else:
         selected_groups = set(list_default_groups(payload))
-    selected_groups.add("screening_base")  # скрининг обязателен
+    selected_groups.add("screening_base")
     extra_ids = set(payload.get("extra_ids") or [])
+
+    template_selection_in = payload.get("template_selection") or {}
+    template_selection: dict[str, list[str]] = {}
+    for gid, tids in template_selection_in.items():
+        if isinstance(tids, list):
+            template_selection[str(gid)] = [str(x) for x in tids]
+
+    extra_sel_in = payload.get("extra_template_selection") or {}
+    extra_template_selection: dict[str, list[str]] = {}
+    for eid, tids in extra_sel_in.items():
+        if isinstance(tids, list):
+            extra_template_selection[str(eid)] = [str(x) for x in tids]
+
+    stimulus_assets = payload.get("stimulus_assets")
+    if not isinstance(stimulus_assets, dict):
+        stimulus_assets = {}
 
     blocks: list[dict] = []
     notes = (payload.get("client_notes") or "").strip()
-    meta = {
+    meta: dict[str, Any] = {
         "project_name": (payload.get("project_name") or "").strip() or "Без названия",
         "phase": phase,
         "phase_label": "Посттест (после кампании)" if phase == "post" else "Претест (до кампании)",
         "counts": counts,
         "active_stimuli": sorted(active),
         "client_notes": notes,
+        "stimulus_assets": stimulus_assets,
     }
 
-    # --- Блок: вводные для программиста ---
+    base_intro = (
+        "Собрать анкету в системе сбора (ОнИн и т.п.) согласно порядку блоков ниже. "
+        "Для каждого вопроса — тип ответа, валидация, условия показа (если указаны), квоты — по отдельному ТЗ проекта. "
+        "Названия бренда и списки городов подставить из брифа. "
+        "Ссылки на медиа стимулов (если заданы в конструкторе) подставить в показ на соответствующих экранах."
+    )
+    dyn = _rotation_and_same_questions_notes(counts)
     prog_intro = {
         "id": "blk_intro",
         "title": "0. Вводные для разработки анкеты",
-        "programmer_instructions": (
-            "Собрать анкету в системе сбора (ОнИн и т.п.) согласно порядку блоков ниже. "
-            "Для каждого вопроса — тип ответа, валидация, условия показа (если указаны), ротация стимулов и квоты — по отдельному ТЗ проекта. "
-            "Названия бренда и списки городов подставить из брифа."
-        ),
+        "programmer_instructions": base_intro + " " + dyn,
         "questions": [],
     }
     blocks.append(prog_intro)
 
     q_global = [0]
 
-    # --- Индикаторы из каталога ---
+    recall_extra = next((e for e in EXTRA_OPTIONS if e["id"] == "recall_seen_layouts"), None)
+    recall_pending: dict | None = None
+    if recall_extra and recall_extra["id"] in extra_ids:
+        blk = _build_extra_block(
+            recall_extra,
+            active=active,
+            counts=counts,
+            extra_template_selection=extra_template_selection,
+            q_global=q_global,
+            stimulus_assets=stimulus_assets,
+        )
+        if blk:
+            recall_pending = blk
+
     for group in INDICATOR_GROUPS:
         if group["id"] not in selected_groups:
             continue
-        if not group_applies(group, phase, active):
-            continue
-        templates = collect_templates_for_group(group, active)
-        if not templates:
-            continue
-        bp = f"q_{_slug(group['id'])}"
-        block = {
-            "id": f"blk_{group['id']}",
-            "title": group["label"],
-            "programmer_instructions": group.get("description") or "",
-            "questions": [],
-        }
-        for tpl in templates:
-            block["questions"].extend(
-                expand_templates_for_repeat(tpl, counts, bp, q_global)
-            )
-        if block["questions"]:
-            blocks.append(block)
+        if group["id"] == "layout_core" and recall_pending:
+            blocks.append(recall_pending)
+            recall_pending = None
 
-    # --- Доп. опции (extras) ---
+        blk = _build_indicator_block(
+            group,
+            phase=phase,
+            active=active,
+            counts=counts,
+            template_selection=template_selection,
+            q_global=q_global,
+            stimulus_assets=stimulus_assets,
+        )
+        if blk:
+            blocks.append(blk)
+
+    if recall_pending:
+        blocks.append(recall_pending)
+
     for extra in EXTRA_OPTIONS:
         if extra["id"] not in extra_ids:
             continue
-        inj = extra.get("inject") or {}
-        fs = set(inj.get("for_stimuli") or [])
-        if fs and not (fs & active):
+        if extra["id"] == "recall_seen_layouts":
             continue
-        bp = f"q_extra_{extra['id']}"
-        block = {
-            "id": f"blk_extra_{extra['id']}",
-            "title": f"Дополнительно: {extra['label']}",
-            "programmer_instructions": extra.get("hint") or "",
-            "questions": [],
-        }
-        for tpl in inj.get("templates") or []:
-            block["questions"].extend(
-                expand_templates_for_repeat(tpl, counts, bp, q_global)
-            )
-        if block["questions"]:
-            blocks.append(block)
+        blk = _build_extra_block(
+            extra,
+            active=active,
+            counts=counts,
+            extra_template_selection=extra_template_selection,
+            q_global=q_global,
+            stimulus_assets=stimulus_assets,
+        )
+        if blk:
+            blocks.append(blk)
 
-    # --- Пользовательские вопросы ---
     customs = payload.get("custom_questions") or []
     if customs:
         cb = {

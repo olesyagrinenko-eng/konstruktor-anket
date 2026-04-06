@@ -3,16 +3,30 @@
 from __future__ import annotations
 
 import io
+import os
 import re
+import uuid
 from datetime import datetime
 
 from flask import Flask, jsonify, render_template, request, send_file
+from werkzeug.utils import secure_filename
 
 from builder import build_questionnaire, list_default_groups
 from catalog import EXTRA_OPTIONS, INDICATOR_GROUPS, STIMULUS_LABELS
 from docx_export import spec_to_docx
 
 app = Flask(__name__)
+
+ALLOWED_UPLOAD_EXT = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".bmp"}
+
+
+def _uploads_dir() -> str:
+    return os.path.join(app.root_path, "static", "uploads")
+
+
+def _ensure_uploads() -> None:
+    path = _uploads_dir()
+    os.makedirs(path, exist_ok=True)
 
 
 def _safe_filename(name: str) -> str:
@@ -24,6 +38,16 @@ def _safe_filename(name: str) -> str:
 @app.route("/")
 def index():
     return render_template("index.html")
+
+
+def _template_preview(t: dict) -> dict:
+    return {
+        "tid": t.get("tid"),
+        "text": t.get("text") or "",
+        "qtype": t.get("qtype"),
+        "repeat_per": t.get("repeat_per"),
+        "layout_debrand_open": bool(t.get("layout_debrand_open")),
+    }
 
 
 @app.route("/api/catalog")
@@ -38,17 +62,21 @@ def api_catalog():
                 "for_stimuli": g.get("for_stimuli") or [],
                 "phase": g.get("phase") or "both",
                 "default_on": bool(g.get("default_on")),
+                "templates": [_template_preview(t) for t in (g.get("templates") or [])],
             }
         )
-    extras_out = [
-        {
-            "id": e["id"],
-            "label": e["label"],
-            "hint": e.get("hint") or "",
-            "for_stimuli": (e.get("inject") or {}).get("for_stimuli") or [],
-        }
-        for e in EXTRA_OPTIONS
-    ]
+    extras_out = []
+    for e in EXTRA_OPTIONS:
+        inj = e.get("inject") or {}
+        extras_out.append(
+            {
+                "id": e["id"],
+                "label": e["label"],
+                "hint": e.get("hint") or "",
+                "for_stimuli": inj.get("for_stimuli") or [],
+                "templates": [_template_preview(t) for t in (inj.get("templates") or [])],
+            }
+        )
     return jsonify(
         {
             "stimulus_labels": STIMULUS_LABELS,
@@ -70,6 +98,28 @@ def api_build():
     data = request.get_json(force=True, silent=True) or {}
     spec = build_questionnaire(data)
     return jsonify(spec)
+
+
+@app.route("/api/upload-stimulus", methods=["POST"])
+def api_upload_stimulus():
+    if "file" not in request.files:
+        return jsonify({"error": "Нет файла (поле file)"}), 400
+    f = request.files["file"]
+    if not f or not f.filename:
+        return jsonify({"error": "Пустое имя файла"}), 400
+    raw = secure_filename(f.filename) or "image"
+    ext = os.path.splitext(raw)[1].lower()
+    if ext not in ALLOWED_UPLOAD_EXT:
+        return jsonify(
+            {"error": f"Допустимые расширения: {', '.join(sorted(ALLOWED_UPLOAD_EXT))}"}
+        ), 400
+    _ensure_uploads()
+    name = f"{uuid.uuid4().hex}{ext}"
+    path = os.path.join(_uploads_dir(), name)
+    f.save(path)
+    root = (request.script_root or "").rstrip("/")
+    url = f"{root}/static/uploads/{name}"
+    return jsonify({"url": url, "filename": name})
 
 
 @app.route("/api/export/docx", methods=["POST"])
