@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Конструктор анкет — тесты креативов</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <div class="wrap">
+    <header class="page">
+      <h1>Конструктор анкеты под тест креативов</h1>
+      <p>Онлайн-опрос · 18–54 · география Яндекс Лавки · панель ОнИн. Соберите блоки, показатели и выгрузите ТЗ программисту в DOCX.</p>
+    </header>
+
+    <nav class="steps" id="stepNav" aria-label="Шаги"></nav>
+    <div id="errGlobal" class="err hidden"></div>
+
+    <!-- Шаг 1 -->
+    <section class="panel step" data-step="1">
+      <h2>1. Проект и этап</h2>
+      <p class="hint">Укажите название для шапки спецификации и тип замера: до выхода кампании (претест) или после (посттест).</p>
+      <label class="lbl" for="projectName">Название проекта / волны</label>
+      <input type="text" id="projectName" placeholder="Например: Летняя РК 2026 — претест">
+
+      <label class="lbl">Этап</label>
+      <div class="radio-row">
+        <label><input type="radio" name="phase" value="pre" checked> Претест (до кампании)</label>
+        <label><input type="radio" name="phase" value="post"> Посттест (после кампании)</label>
+      </div>
+    </section>
+
+    <!-- Шаг 2 -->
+    <section class="panel step hidden" data-step="2">
+      <h2>2. Материалы</h2>
+      <p class="hint">Сколько стимулов каждого типа попадёт в анкету (0 — если типа нет). Сценарий и концепция задаются отдельными счётчиками: при &gt; 0 подключаются соответствующие блоки вопросов.</p>
+      <div class="grid2">
+        <div>
+          <label class="lbl" for="cVideo">Ролики (видео)</label>
+          <input type="number" id="cVideo" min="0" max="20" value="0">
+        </div>
+        <div>
+          <label class="lbl" for="cLayout">Макеты (статика)</label>
+          <input type="number" id="cLayout" min="0" max="30" value="0">
+        </div>
+        <div>
+          <label class="lbl" for="cScenario">Сценарии (текст/сториборд)</label>
+          <input type="number" id="cScenario" min="0" max="10" value="0">
+        </div>
+        <div>
+          <label class="lbl" for="cConcept">Концепции (сценарий + КС + визуал)</label>
+          <input type="number" id="cConcept" min="0" max="10" value="0">
+        </div>
+        <div>
+          <label class="lbl" for="cPack">Упаковки</label>
+          <input type="number" id="cPack" min="0" max="20" value="0">
+        </div>
+      </div>
+      <p class="hint" style="margin-top:1rem">Минимум один тип материала с количеством &gt; 0, иначе собрать анкету нельзя.</p>
+    </section>
+
+    <!-- Шаг 3 -->
+    <section class="panel step hidden" data-step="3">
+      <h2>3. Типовые показатели</h2>
+      <p class="hint">Список сформирован по выбранным материалам и этапу. Снимите галочки с ненужных блоков или оставьте как есть.</p>
+      <div id="groupChecks" class="chk-list"></div>
+    </section>
+
+    <!-- Шаг 4 -->
+    <section class="panel step hidden" data-step="4">
+      <h2>4. Дополнительно</h2>
+      <p class="hint">Опциональные блоки (клик-тест, recall и т.д.) — только если есть подходящие материалы.</p>
+      <div id="extraChecks" class="chk-list"></div>
+      <label class="lbl" for="freeNotes">Свободные пожелания заказчика</label>
+      <textarea id="freeNotes" placeholder="Например: добавить вопрос про готовность скачать приложение; разделить показ макетов на два экрана…"></textarea>
+    </section>
+
+    <!-- Шаг 5 -->
+    <section class="panel step hidden" data-step="5">
+      <h2>5. Структура анкеты</h2>
+      <p class="hint">Проверьте формулировки и типы ответов. Можно править текст, варианты (через «;»), добавлять строки. Затем выгрузите DOCX для передачи в разработку.</p>
+      <div class="actions">
+        <button type="button" class="primary" id="btnRebuild">Пересобрать из шагов 1–4</button>
+        <button type="button" class="secondary accent" id="btnExport">Скачать DOCX</button>
+        <button type="button" class="secondary" id="btnAddQ">Добавить свой вопрос</button>
+      </div>
+      <div id="specOut"></div>
+    </section>
+
+    <div class="actions" id="navActions">
+      <button type="button" class="secondary" id="btnPrev">Назад</button>
+      <button type="button" class="primary" id="btnNext">Далее</button>
+    </div>
+  </div>
+  <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>

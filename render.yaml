@@ -1,0 +1,8 @@
+# Опционально: New → Blueprint → выбрать репозиторий с этим файлом.
+# Либо создайте Web Service вручную (см. DEPLOY.md) — тогда render.yaml не обязателен.
+services:
+  - type: web
+    name: konstruktor-anket
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app --bind 0.0.0.0:$PORT --workers 2 --timeout 120
