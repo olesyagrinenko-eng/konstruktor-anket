@@ -1,4 +1,15 @@
 (function () {
+  const API_PREFIX = (() => {
+    const m = document.querySelector('meta[name="api-prefix"]');
+    let p = (m && m.getAttribute("content")) || "";
+    if (p.endsWith("/")) p = p.slice(0, -1);
+    return p;
+  })();
+
+  function apiUrl(path) {
+    return API_PREFIX + path;
+  }
+
   const STEPS = 5;
   let step = 1;
   let catalog = null;
@@ -12,6 +23,7 @@
 
   function showErr(msg) {
     const el = $("#errGlobal");
+    if (!el) return;
     if (!msg) {
       el.classList.add("hidden");
       el.textContent = "";
@@ -26,13 +38,18 @@
     return r ? r.value : "pre";
   }
 
+  function numVal(id) {
+    const el = document.getElementById(id);
+    return Math.max(0, parseInt(el && el.value, 10) || 0);
+  }
+
   function getCounts() {
     return {
-      video: Math.max(0, parseInt($("#cVideo").value, 10) || 0),
-      layout: Math.max(0, parseInt($("#cLayout").value, 10) || 0),
-      scenario: Math.max(0, parseInt($("#cScenario").value, 10) || 0),
-      concept: Math.max(0, parseInt($("#cConcept").value, 10) || 0),
-      packaging: Math.max(0, parseInt($("#cPack").value, 10) || 0),
+      video: numVal("cVideo"),
+      layout: numVal("cLayout"),
+      scenario: numVal("cScenario"),
+      concept: numVal("cConcept"),
+      packaging: numVal("cPack"),
     };
   }
 
@@ -57,41 +74,64 @@
   }
 
   function buildPayload() {
+    const pn = $("#projectName");
+    const fn = $("#freeNotes");
     return {
-      project_name: $("#projectName").value.trim(),
+      project_name: pn ? pn.value.trim() : "",
       phase: getPhase(),
       counts: getCounts(),
       group_ids: Array.from(selectedGroups),
       extra_ids: Array.from(selectedExtras),
-      client_notes: $("#freeNotes").value.trim(),
+      client_notes: fn ? fn.value.trim() : "",
       custom_questions: [],
     };
   }
 
   function renderStepNav() {
     const nav = $("#stepNav");
+    if (!nav) return;
     nav.innerHTML = "";
     for (let i = 1; i <= STEPS; i++) {
       const b = document.createElement("button");
       b.type = "button";
-      b.textContent = i;
+      b.textContent = String(i);
       b.classList.toggle("active", i === step);
-      b.addEventListener("click", () => goStep(i));
+      b.addEventListener("click", () => {
+        goStep(i).catch((e) => {
+          console.error(e);
+          showErr(e.message || "Ошибка при переходе на шаг");
+        });
+      });
       nav.appendChild(b);
     }
   }
 
-  function goStep(n) {
+  async function goStep(n) {
     showErr("");
     $$(".step").forEach((p) => {
       p.classList.toggle("hidden", parseInt(p.dataset.step, 10) !== n);
     });
     step = n;
     renderStepNav();
-    $("#btnPrev").classList.toggle("hidden", n === 1);
+    const prev = $("#btnPrev");
     const next = $("#btnNext");
-    next.classList.toggle("hidden", n === STEPS);
-    next.textContent = n === 4 ? "Собрать и перейти к структуре" : "Далее";
+    if (prev) prev.classList.toggle("hidden", n === 1);
+    if (next) {
+      next.classList.toggle("hidden", n === STEPS);
+      next.textContent = n === 4 ? "Собрать и перейти к структуре" : "Далее";
+    }
+    // Шаги 3–4: всегда перезаполняем списки (в т.ч. при клике по номеру шага в навигации)
+    if (n === 3 || n === 4) {
+      try {
+        await refreshGroupSelectors();
+      } catch (e) {
+        console.error(e);
+        showErr(
+          "Не удалось загрузить показатели. Проверьте соединение и обновите страницу. " +
+            (e.message || "")
+        );
+      }
+    }
   }
 
   function validateStep2() {
@@ -105,8 +145,15 @@
   }
 
   async function loadCatalog() {
-    const r = await fetch("/api/catalog");
-    catalog = await r.json();
+    const r = await fetch(apiUrl("/api/catalog"), { credentials: "same-origin" });
+    if (!r.ok) {
+      throw new Error(`Каталог недоступен (код ${r.status}).`);
+    }
+    const data = await r.json();
+    if (!data.indicator_groups || !data.extra_options) {
+      throw new Error("Некорректный ответ сервера: нет списков показателей.");
+    }
+    catalog = data;
   }
 
   function extraVisibleById(e) {
@@ -117,17 +164,29 @@
   }
 
   async function refreshGroupSelectors() {
-    if (!catalog) await loadCatalog();
+    if (!catalog) {
+      await loadCatalog();
+    }
     const payload = buildPayload();
-    const sug = await fetch("/api/suggest-groups", {
+    const sug = await fetch(apiUrl("/api/suggest-groups"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
+      credentials: "same-origin",
     });
-    const { group_ids } = await sug.json();
-    selectedGroups = new Set(group_ids);
+    if (!sug.ok) {
+      throw new Error(`Подсказки показателей: код ${sug.status}`);
+    }
+    const sugData = await sug.json();
+    const gids = sugData.group_ids;
+    if (Array.isArray(gids)) {
+      selectedGroups = new Set(gids);
+    }
 
     const host = $("#groupChecks");
+    const exh = $("#extraChecks");
+    if (!host || !exh) return;
+
     host.innerHTML = "";
     catalog.indicator_groups.forEach((g) => {
       if (!groupVisible(g)) return;
@@ -155,7 +214,11 @@
       host.appendChild(lab);
     });
 
-    const exh = $("#extraChecks");
+    if (!host.children.length) {
+      host.innerHTML =
+        '<p class="chk-empty">Нет групп для текущих материалов. Вернитесь на шаг 2 и укажите хотя бы один стимул.</p>';
+    }
+
     exh.innerHTML = "";
     catalog.extra_options.forEach((e) => {
       if (!extraVisibleById(e)) return;
@@ -174,6 +237,11 @@
       lab.appendChild(span);
       exh.appendChild(lab);
     });
+
+    if (!exh.children.length) {
+      exh.innerHTML =
+        '<p class="chk-empty">Нет дополнительных блоков для выбранных материалов (например, клик-тест нужен при наличии макетов).</p>';
+    }
   }
 
   function escapeHtml(s) {
@@ -300,10 +368,11 @@
     const payload = buildPayload();
     payload.group_ids = Array.from(selectedGroups);
     payload.extra_ids = Array.from(selectedExtras);
-    const r = await fetch("/api/build", {
+    const r = await fetch(apiUrl("/api/build"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
+      credentials: "same-origin",
     });
     if (!r.ok) {
       showErr("Ошибка сборки анкеты.");
@@ -316,10 +385,11 @@
   async function exportDocx() {
     if (!currentSpec) return;
     readSpecFromDom();
-    const r = await fetch("/api/export/docx", {
+    const r = await fetch(apiUrl("/api/export/docx"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(currentSpec),
+      credentials: "same-origin",
     });
     if (!r.ok) {
       const j = await r.json().catch(() => ({}));
@@ -368,40 +438,68 @@
   }
 
   document.addEventListener("DOMContentLoaded", async () => {
-    await loadCatalog();
+    try {
+      await loadCatalog();
+    } catch (e) {
+      console.error(e);
+      showErr(
+        "Не загрузился каталог с сервера. Кнопки работают, но шаги 3–4 заполнятся только после успешной загрузки — обновите страницу или проверьте URL приложения (откройте сайт через тот же адрес, где работает API)."
+      );
+    }
+
     renderStepNav();
 
-    $("#btnNext").addEventListener("click", async () => {
-      showErr("");
-      if (step === 1) {
-        goStep(2);
-        return;
-      }
-      if (step === 2) {
-        if (!validateStep2()) return;
-        await refreshGroupSelectors();
-        goStep(3);
-        return;
-      }
-      if (step === 3) {
-        goStep(4);
-        return;
-      }
-      if (step === 4) {
-        goStep(5);
-        await runBuild();
-        return;
-      }
-    });
+    const btnNext = $("#btnNext");
+    if (btnNext) {
+      btnNext.addEventListener("click", async () => {
+        showErr("");
+        try {
+          if (step === 1) {
+            await goStep(2);
+            return;
+          }
+          if (step === 2) {
+            if (!validateStep2()) return;
+            await goStep(3);
+            return;
+          }
+          if (step === 3) {
+            await goStep(4);
+            return;
+          }
+          if (step === 4) {
+            await goStep(5);
+            await runBuild();
+            return;
+          }
+        } catch (e) {
+          console.error(e);
+          showErr(e.message || "Ошибка");
+        }
+      });
+    }
 
-    $("#btnPrev").addEventListener("click", () => {
-      if (step > 1) goStep(step - 1);
-    });
+    const btnPrev = $("#btnPrev");
+    if (btnPrev) {
+      btnPrev.addEventListener("click", () => {
+        if (step > 1) {
+          goStep(step - 1).catch((e) => {
+            console.error(e);
+            showErr(e.message || "Ошибка");
+          });
+        }
+      });
+    }
 
-    $("#btnRebuild").addEventListener("click", () => runBuild());
-    $("#btnExport").addEventListener("click", () => exportDocx());
-    $("#btnAddQ").addEventListener("click", () => addCustomQuestion().catch(console.error));
+    const br = $("#btnRebuild");
+    if (br) br.addEventListener("click", () => runBuild().catch((e) => showErr(e.message || "Ошибка сборки")));
 
-    goStep(1);
+    const be = $("#btnExport");
+    if (be) be.addEventListener("click", () => exportDocx().catch((e) => showErr(e.message || "Ошибка экспорта")));
+
+    const ba = $("#btnAddQ");
+    if (ba) ba.addEventListener("click", () => addCustomQuestion().catch(console.error));
+
+    goStep(1).catch(console.error);
   });
 })();
