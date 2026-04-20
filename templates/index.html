@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="api-prefix" content="{{ request.script_root or '' }}">
   <title>Конструктор анкет — тесты креативов</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=5">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=6">
 </head>
 <body>
   <div class="wrap">
@@ -19,6 +19,13 @@
       <button type="button" class="secondary btn-reset" id="btnResetWizard" title="Очистить форму и вернуться к шагу 1">
         Сбросить и начать заново
       </button>
+    </div>
+    <div id="resetConfirmBar" class="reset-confirm hidden" role="region" aria-label="Подтверждение сброса">
+      <span class="reset-confirm-text">Сбросить все шаги и собранную анкету? Это нельзя отменить.</span>
+      <div class="reset-confirm-actions">
+        <button type="button" class="primary" id="btnResetConfirm">Да, сбросить</button>
+        <button type="button" class="secondary" id="btnResetCancel">Отмена</button>
+      </div>
     </div>
     <div id="errGlobal" class="err hidden"></div>
 
@@ -92,6 +99,9 @@
         <button type="button" class="primary" id="btnRebuild">Пересобрать из шагов 1–4</button>
         <button type="button" class="secondary accent" id="btnExport">Скачать DOCX</button>
         <button type="button" class="secondary" id="btnAddQ">Добавить свой вопрос</button>
+        <button type="button" class="secondary btn-reset" id="btnResetWizardStep5" title="Очистить форму и вернуться к шагу 1">
+          Сбросить и начать заново
+        </button>
       </div>
       <div id="specOut"></div>
     </section>
@@ -101,6 +111,6 @@
       <button type="button" class="primary" id="btnNext">Далее</button>
     </div>
   </div>
-  <script src="{{ url_for('static', filename='app.js') }}?v=5" defer></script>
+  <script src="{{ url_for('static', filename='app.js') }}?v=6" defer></script>
 </body>
 </html>

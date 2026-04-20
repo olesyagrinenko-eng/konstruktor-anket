@@ -263,8 +263,26 @@
     }
   }
 
+  function hideResetConfirmBar() {
+    const bar = $("#resetConfirmBar");
+    if (bar) bar.classList.add("hidden");
+  }
+
+  function showResetConfirmBar() {
+    const bar = $("#resetConfirmBar");
+    if (bar) {
+      bar.classList.remove("hidden");
+      try {
+        bar.scrollIntoView({ block: "nearest", behavior: "smooth" });
+      } catch (_) {
+        /* ignore */
+      }
+    }
+  }
+
   async function goStep(n) {
     showErr("");
+    hideResetConfirmBar();
     $$(".step").forEach((p) => {
       p.classList.toggle("hidden", parseInt(p.dataset.step, 10) !== n);
     });
@@ -303,12 +321,12 @@
     }
   }
 
-  async function resetWizard() {
-    const msg =
-      "Сбросить все поля и вернуться к шагу 1? Собранная анкета и правки на шаге 5 будут удалены.";
-    if (typeof window !== "undefined" && window.confirm && !window.confirm(msg)) {
-      return;
-    }
+  function openResetConfirm() {
+    showResetConfirmBar();
+  }
+
+  async function performReset() {
+    hideResetConfirmBar();
     showErr("");
     const pn = $("#projectName");
     if (pn) pn.value = "";
@@ -771,7 +789,13 @@
 
   async function exportDocx() {
     if (!currentSpec) return;
-    readSpecFromDom();
+    try {
+      readSpecFromDom();
+    } catch (e) {
+      console.error(e);
+      showErr("Не удалось прочитать правки из таблицы. Проверьте, что все строки заполнены корректно.");
+      return;
+    }
     const r = await fetch(apiUrl("/api/export/docx"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -790,11 +814,18 @@
       const m = cd.match(/filename\*?=(?:UTF-8'')?["']?([^"';]+)/i);
       if (m) name = decodeURIComponent(m[1]);
     }
+    const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
+    a.href = url;
     a.download = name;
+    a.rel = "noopener";
+    a.style.cssText = "position:fixed;left:-9999px;top:0;width:1px;height:1px;opacity:0;pointer-events:none;";
+    document.body.appendChild(a);
     a.click();
-    URL.revokeObjectURL(a.href);
+    setTimeout(() => {
+      URL.revokeObjectURL(url);
+      if (a.parentNode) a.parentNode.removeChild(a);
+    }, 4000);
   }
 
   async function addCustomQuestion() {
@@ -897,9 +928,22 @@
     const ba = $("#btnAddQ");
     if (ba) ba.addEventListener("click", () => addCustomQuestion().catch(console.error));
 
-    const btnReset = $("#btnResetWizard");
-    if (btnReset) {
-      btnReset.addEventListener("click", () => resetWizard().catch((e) => showErr(e.message || "Ошибка сброса")));
+    const bindReset = (id) => {
+      const b = document.getElementById(id);
+      if (b) b.addEventListener("click", () => openResetConfirm());
+    };
+    bindReset("btnResetWizard");
+    bindReset("btnResetWizardStep5");
+
+    const btnResetConfirm = $("#btnResetConfirm");
+    if (btnResetConfirm) {
+      btnResetConfirm.addEventListener("click", () =>
+        performReset().catch((e) => showErr(e.message || "Ошибка сброса"))
+      );
+    }
+    const btnResetCancel = $("#btnResetCancel");
+    if (btnResetCancel) {
+      btnResetCancel.addEventListener("click", () => hideResetConfirmBar());
     }
 
     goStep(1).catch(console.error);

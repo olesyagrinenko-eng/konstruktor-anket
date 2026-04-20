@@ -67,8 +67,14 @@ header.page p {
   justify-content: space-between;
   gap: 0.75rem 1rem;
   margin-bottom: 1rem;
-  position: relative;
-  z-index: 2;
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  padding: 0.4rem 0;
+  margin-top: -0.15rem;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.04);
 }
 
 .top-toolbar .steps {
@@ -237,7 +243,36 @@ textarea { max-width: 100%; min-height: 72px; resize: vertical; }
   bottom: 0;
   background: linear-gradient(transparent, var(--bg) 30%);
   padding-bottom: 0.5rem;
-  z-index: 5;
+  z-index: 4;
+}
+
+.reset-confirm {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.65rem 1rem;
+  padding: 0.65rem 1rem;
+  margin-bottom: 0.85rem;
+  border-radius: 10px;
+  border: 1px solid var(--accent-pink);
+  background: linear-gradient(100deg, var(--accent-pink-dim), rgba(255, 255, 255, 0.9));
+  position: relative;
+  z-index: 25;
+}
+
+.reset-confirm-text {
+  font-size: 0.9rem;
+  color: var(--text);
+  max-width: 42rem;
+  line-height: 1.4;
+}
+
+.reset-confirm-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  flex-shrink: 0;
 }
 
 button.primary {
