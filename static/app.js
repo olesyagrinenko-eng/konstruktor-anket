@@ -303,6 +303,47 @@
     }
   }
 
+  async function resetWizard() {
+    const msg =
+      "Сбросить все поля и вернуться к шагу 1? Собранная анкета и правки на шаге 5 будут удалены.";
+    if (typeof window !== "undefined" && window.confirm && !window.confirm(msg)) {
+      return;
+    }
+    showErr("");
+    const pn = $("#projectName");
+    if (pn) pn.value = "";
+    const pre = $('input[name="phase"][value="pre"]');
+    if (pre) pre.checked = true;
+    STIMULUS_TYPES.forEach(([, cid]) => {
+      const el = document.getElementById(cid);
+      if (el) el.value = "0";
+    });
+    const fn = $("#freeNotes");
+    if (fn) fn.value = "";
+    selectedGroups = new Set();
+    selectedExtras = new Set();
+    selectedTemplates = new Map();
+    selectedExtraTemplates = new Map();
+    currentSpec = null;
+    const host = $("#groupChecks");
+    if (host) host.innerHTML = "";
+    const exh = $("#extraChecks");
+    if (exh) exh.innerHTML = "";
+    const stim = $("#stimAssetRows");
+    if (stim) stim.innerHTML = "";
+    const specOut = $("#specOut");
+    if (specOut) {
+      specOut.innerHTML =
+        '<p class="hint">Нет данных. Пройдите шаги 1–4 и нажмите «Собрать и перейти к структуре».</p>';
+    }
+    try {
+      await goStep(1);
+    } catch (e) {
+      console.error(e);
+      showErr(e.message || "Ошибка при сбросе");
+    }
+  }
+
   function validateStep2() {
     const c = getCounts();
     const t = Object.values(c).reduce((s, x) => s + x, 0);
@@ -855,6 +896,11 @@
 
     const ba = $("#btnAddQ");
     if (ba) ba.addEventListener("click", () => addCustomQuestion().catch(console.error));
+
+    const btnReset = $("#btnResetWizard");
+    if (btnReset) {
+      btnReset.addEventListener("click", () => resetWizard().catch((e) => showErr(e.message || "Ошибка сброса")));
+    }
 
     goStep(1).catch(console.error);
   });

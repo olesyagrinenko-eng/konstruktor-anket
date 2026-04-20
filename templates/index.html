@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="api-prefix" content="{{ request.script_root or '' }}">
   <title>Конструктор анкет — тесты креативов</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=4">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=5">
 </head>
 <body>
   <div class="wrap">
@@ -14,7 +14,12 @@
       <p>Онлайн-опрос · 18–54 · география Яндекс Лавки · панель ОнИн. Соберите блоки, показатели и выгрузите ТЗ программисту в DOCX.</p>
     </header>
 
-    <nav class="steps" id="stepNav" aria-label="Шаги"></nav>
+    <div class="top-toolbar">
+      <nav class="steps" id="stepNav" aria-label="Шаги"></nav>
+      <button type="button" class="secondary btn-reset" id="btnResetWizard" title="Очистить форму и вернуться к шагу 1">
+        Сбросить и начать заново
+      </button>
+    </div>
     <div id="errGlobal" class="err hidden"></div>
 
     <!-- Шаг 1 -->
@@ -96,6 +101,6 @@
       <button type="button" class="primary" id="btnNext">Далее</button>
     </div>
   </div>
-  <script src="{{ url_for('static', filename='app.js') }}?v=4" defer></script>
+  <script src="{{ url_for('static', filename='app.js') }}?v=5" defer></script>
 </body>
 </html>
