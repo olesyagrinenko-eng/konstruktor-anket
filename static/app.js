@@ -148,6 +148,7 @@
       method: "POST",
       body: fd,
       credentials: "same-origin",
+      cache: "no-store",
     });
     const j = await r.json().catch(() => ({}));
     if (!r.ok) {
@@ -386,7 +387,10 @@
   }
 
   async function loadCatalog() {
-    const r = await fetch(apiUrl("/api/catalog"), { credentials: "same-origin" });
+    const r = await fetch(apiUrl("/api/catalog"), {
+      credentials: "same-origin",
+      cache: "no-store",
+    });
     if (!r.ok) {
       throw new Error(`Каталог недоступен (код ${r.status}).`);
     }
@@ -426,6 +430,7 @@
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payloadBase),
       credentials: "same-origin",
+      cache: "no-store",
     });
     if (!sug.ok) {
       throw new Error(`Подсказки показателей: код ${sug.status}`);
@@ -778,6 +783,7 @@
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
       credentials: "same-origin",
+      cache: "no-store",
     });
     if (!r.ok) {
       showErr("Ошибка сборки анкеты.");
@@ -801,6 +807,7 @@
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(currentSpec),
       credentials: "same-origin",
+      cache: "no-store",
     });
     if (!r.ok) {
       const j = await r.json().catch(() => ({}));

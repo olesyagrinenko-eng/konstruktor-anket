@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import io
 import os
+import pathlib
 import re
 import uuid
 from datetime import datetime
@@ -18,6 +19,41 @@ from docx_export import spec_to_docx
 app = Flask(__name__)
 
 ALLOWED_UPLOAD_EXT = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".bmp"}
+
+
+def get_asset_version() -> str:
+    """Версия для query-string у статики: коммит на Render/Heroku или mtime файлов (обновляется при правках без деплоя)."""
+    for key in (
+        "RENDER_GIT_COMMIT",
+        "GIT_COMMIT",
+        "SOURCE_VERSION",
+        "KONSTRUKTOR_ASSET_VERSION",
+    ):
+        v = os.environ.get(key)
+        if v:
+            return re.sub(r"[^a-zA-Z0-9_.-]", "", str(v))[:24]
+    root = pathlib.Path(__file__).resolve().parent
+    files = [root / "static" / "app.js", root / "static" / "style.css"]
+    try:
+        return str(int(max(p.stat().st_mtime for p in files if p.is_file())))
+    except (OSError, ValueError):
+        return "1"
+
+
+@app.context_processor
+def _inject_asset_version():
+    return {"asset_version": get_asset_version()}
+
+
+@app.after_request
+def _disable_caching_for_app(response):
+    """Не кэшировать HTML, API и статику конструктора — иначе после выкладки висит старый JS и «старая анкета»."""
+    path = request.path or ""
+    if path == "/" or path.startswith("/api/") or path.startswith("/static/"):
+        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+    return response
 
 
 def _uploads_dir() -> str:

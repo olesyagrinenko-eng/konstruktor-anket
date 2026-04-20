@@ -3,9 +3,11 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
   <meta name="api-prefix" content="{{ request.script_root or '' }}">
   <title>Конструктор анкет — тесты креативов</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=6">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v={{ asset_version }}">
 </head>
 <body>
   <div class="wrap">
@@ -111,6 +113,6 @@
       <button type="button" class="primary" id="btnNext">Далее</button>
     </div>
   </div>
-  <script src="{{ url_for('static', filename='app.js') }}?v=6" defer></script>
+  <script src="{{ url_for('static', filename='app.js') }}?v={{ asset_version }}" defer></script>
 </body>
 </html>
