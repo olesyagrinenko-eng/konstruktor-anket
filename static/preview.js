@@ -24,6 +24,12 @@
     out = out.replace(/\bQ\s*\d+\b[\.\:]?/gi, "").trim();
     out = out.replace(/^\s*Экран\s+/i, "").trim();
     out = out.replace(/\b(Открытый|Шкала|Один из списка|Несколько из списка|Клик[- ]?тест|Инструкция)\s*$/i, "").trim();
+    out = out.split(/\bПоказать\b/i)[0].trim() || out;
+    out = out.split(/\bПоказываем\b/i)[0].trim() || out;
+    out = out.split(/\bВопросы\s+\d+/i)[0].trim() || out;
+    out = out.split(/\bQ\s*\d+\s*\./i)[0].trim() || out;
+    out = out.replace(/\bОткрытый\s*$/i, "").trim();
+    out = out.replace(/\s*\.\s*$/, "").trim();
     out = out.replace(/\s{2,}/g, " ").trim();
     return out;
   }
@@ -79,6 +85,17 @@
     return allowed.join("\n").trim();
   }
 
+  function respondentInstructionText(text) {
+    const raw = stripTechnicalTail(text);
+    if (!raw) return "";
+    const sentences = raw
+      .split(/(?<=[.!?])\s+/)
+      .map((x) => x.trim())
+      .filter(Boolean)
+      .filter((line) => !isTechnicalInstruction(line));
+    return sentences.slice(0, 2).join(" ").trim() || raw;
+  }
+
   function setStatus(msg, isError) {
     const el = $("#standalonePreviewStatus");
     if (!el) return;
@@ -87,9 +104,12 @@
   }
 
   function renderRespondentQuestion(q, index) {
-    const cleanTitle = stripTechnicalTail(q.header2 || q.name || `Вопрос ${index + 1}`);
+    const sourceTitle = q.type === "TEXT"
+      ? respondentInstructionText(q.header2 || q.name || `Вопрос ${index + 1}`)
+      : stripTechnicalTail(q.header2 || q.name || `Вопрос ${index + 1}`);
+    const cleanTitle = sourceTitle;
     const title = escapeHtml(cleanTitle || q.name || `Вопрос ${index + 1}`);
-    const visibleNote = respondentNote(q.question);
+    const visibleNote = q.type === "TEXT" ? "" : respondentNote(q.question);
     const note = visibleNote ? `<div class="preview-note">${escapeHtml(visibleNote)}</div>` : "";
     const media = q.meta && q.meta.mediaUrl
       ? `<div class="preview-media"><img src="${escapeAttr(q.meta.mediaUrl)}" alt="${title}"></div>`
