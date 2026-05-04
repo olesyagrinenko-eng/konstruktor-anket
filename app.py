@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import io
+import json
 import os
 import pathlib
 import re
@@ -15,6 +16,8 @@ from werkzeug.utils import secure_filename
 from builder import build_questionnaire, list_default_groups
 from catalog import EXTRA_OPTIONS, INDICATOR_GROUPS, STIMULUS_LABELS
 from docx_export import spec_to_docx
+from ssi import spec_to_ssi, validate_ssi_questionnaire
+from word_import import import_docx_to_spec
 
 app = Flask(__name__)
 
@@ -69,6 +72,22 @@ def _safe_filename(name: str) -> str:
     base = re.sub(r"[^\w\s\-А-Яа-яёЁ]+", "", name, flags=re.U).strip() or "anketa"
     base = re.sub(r"\s+", "_", base)[:80]
     return f"{base}_{datetime.now().strftime('%Y%m%d_%H%M')}.docx"
+
+
+def _safe_json_filename(name: str) -> str:
+    base = re.sub(r"[^\w\s\-А-Яа-яёЁ]+", "", name, flags=re.U).strip() or "questionnaire"
+    base = re.sub(r"\s+", "_", base)[:80]
+    return f"{base}_{datetime.now().strftime('%Y%m%d_%H%M')}.json"
+
+
+def _ssi_payload_from_spec(spec: dict) -> dict:
+    questionnaire, warnings = spec_to_ssi(spec)
+    validation = validate_ssi_questionnaire(questionnaire)
+    return {
+        "questionnaire": questionnaire,
+        "warnings": warnings,
+        "validation": validation,
+    }
 
 
 @app.route("/")
@@ -173,6 +192,77 @@ def api_export_docx():
         as_attachment=True,
         download_name=name,
         mimetype="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    )
+
+
+@app.route("/api/import/docx", methods=["POST"])
+def api_import_docx():
+    if "file" not in request.files:
+        return jsonify({"error": "Нет файла (поле file)"}), 400
+    f = request.files["file"]
+    if not f or not f.filename:
+        return jsonify({"error": "Пустое имя файла"}), 400
+    if not f.filename.lower().endswith(".docx"):
+        return jsonify({"error": "Поддерживается только формат .docx"}), 400
+    try:
+        spec, import_warnings = import_docx_to_spec(f.read(), f.filename)
+        ssi_payload = _ssi_payload_from_spec(spec)
+    except Exception as e:  # noqa: BLE001
+        return jsonify({"error": f"Ошибка импорта Word: {e}"}), 500
+    return jsonify(
+        {
+            "spec": spec,
+            "importWarnings": import_warnings,
+            **ssi_payload,
+        }
+    )
+
+
+@app.route("/api/convert/ssi-json", methods=["POST"])
+def api_convert_ssi_json():
+    data = request.get_json(force=True, silent=True) or {}
+    if not data.get("blocks"):
+        return jsonify({"error": "Нет данных анкеты (blocks)"}), 400
+    try:
+        return jsonify(_ssi_payload_from_spec(data))
+    except Exception as e:  # noqa: BLE001
+        return jsonify({"error": f"Ошибка конвертации в SSI JSON: {e}"}), 500
+
+
+@app.route("/api/validate/ssi-json", methods=["POST"])
+def api_validate_ssi_json():
+    data = request.get_json(force=True, silent=True) or {}
+    questionnaire = data.get("questionnaire")
+    raw_text = data.get("raw_text")
+    if questionnaire is None and raw_text is None:
+        return jsonify({"error": "Нужен questionnaire или raw_text"}), 400
+    if questionnaire is None:
+        try:
+            questionnaire = json.loads(raw_text)
+        except Exception as e:  # noqa: BLE001
+            return jsonify({"ok": False, "errors": [{"path": "$", "message": f"Некорректный JSON: {e}"}]})
+    return jsonify(validate_ssi_questionnaire(questionnaire))
+
+
+@app.route("/api/export/ssi-json", methods=["POST"])
+def api_export_ssi_json():
+    data = request.get_json(force=True, silent=True) or {}
+    questionnaire = data.get("questionnaire")
+    raw_text = data.get("raw_text")
+    if questionnaire is None and raw_text is None:
+        return jsonify({"error": "Нужен questionnaire или raw_text"}), 400
+    if questionnaire is None:
+        try:
+            questionnaire = json.loads(raw_text)
+        except Exception as e:  # noqa: BLE001
+            return jsonify({"error": f"Некорректный JSON: {e}"}), 400
+    name = _safe_json_filename(str(data.get("filename") or "contractor-ssi-questionnaire"))
+    blob = json.dumps(questionnaire, ensure_ascii=False, indent=2).encode("utf-8")
+    return send_file(
+        io.BytesIO(blob),
+        as_attachment=True,
+        download_name=name,
+        mimetype="application/json",
     )
 
 

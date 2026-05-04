@@ -1,0 +1,10 @@
+[
+  {
+    "name": "openEndQuestion",
+    "type": "OPEN-END",
+    "selectFormat": null,
+    "header2": "Что Вы знаете о минтае (место вылова, свойства, др. – любая информация, которая приходит в голову)?",
+    "minValue": 3,
+    "maxValue": 3000
+  }
+]

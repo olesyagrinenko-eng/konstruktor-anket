@@ -1,0 +1,439 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://swt-utils.local/schemas/contractor-ssi-questionnaire.schema.json",
+  "title": "Contractor Questionnaire Import (JSON -> SSI)",
+  "description": "Единый формат JSON для импорта в SSIGen c набором полей генерилки.",
+  "type": "array",
+  "minItems": 1,
+  "items": {
+    "$ref": "#/$defs/question"
+  },
+  "$defs": {
+    "questionName": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 24,
+      "pattern": "^[A-Za-z][A-Za-z0-9]{0,23}$"
+    },
+    "nonEmptyString": {
+      "type": "string",
+      "minLength": 1
+    },
+    "listItems": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string"
+      }
+    },
+    "rowFormat": {
+      "type": "string",
+      "enum": ["1", "2", "NUMERIC", "OPEN-END"]
+    },
+    "selectFormatField": {
+      "oneOf": [
+        { "$ref": "#/$defs/rowFormat" },
+        { "type": "null" },
+        {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/rowFormat" }
+        }
+      ]
+    },
+    "commaIndexList": {
+      "type": "string",
+      "pattern": "^$|^[1-9][0-9]*(,[1-9][0-9]*)*$"
+    },
+    "numericOrNumericArray": {
+      "oneOf": [
+        { "type": "number" },
+        { "type": "null" },
+        {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "number" }
+        }
+      ]
+    },
+    "quotaCell": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["cellLimit", "condition", "label"],
+      "properties": {
+        "cellLimit": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "label": { "type": "string", "minLength": 1 },
+        "condition": { "type": "string", "minLength": 1 }
+      }
+    },
+    "quotaConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "useTimeLimit": { "type": "boolean" },
+        "useProjCompRate": { "type": "boolean" },
+        "predOption": { "type": "integer" },
+        "checkCellMembership": { "type": "integer" },
+        "projCompRate": { "type": "integer", "minimum": 0, "maximum": 100 },
+        "timeLimit": { "type": "integer", "minimum": 1 },
+        "skipToQuestion": { "type": "string" },
+        "beginCell": { "type": ["string", "integer"] },
+        "endCell": { "type": ["string", "integer"] },
+        "skipLogic": { "type": "array" },
+        "cells": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/quotaCell" }
+        }
+      },
+      "required": ["cells"]
+    },
+    "meta": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "widgetType": {
+          "type": "string",
+          "enum": ["scale", "click_coord"]
+        },
+        "minScaleAnchor": {
+          "type": "string"
+        },
+        "maxScaleAnchor": {
+          "type": "string"
+        },
+        "stimulusType": {
+          "type": "string",
+          "enum": ["concept", "layout", "packaging", "scenario", "video"]
+        },
+        "stimulusIndex": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "mediaUrl": {
+          "type": "string",
+          "pattern": "^https?:\\/\\/.+"
+        },
+        "maxPoints": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "widgetType": { "const": "scale" }
+            },
+            "required": ["widgetType"]
+          },
+          "then": {
+            "required": ["minScaleAnchor", "maxScaleAnchor"]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "widgetType": { "const": "click_coord" }
+            },
+            "required": ["widgetType"]
+          },
+          "then": {
+            "required": ["mediaUrl", "maxPoints"]
+          }
+        },
+        {
+          "if": {
+            "required": ["mediaUrl"],
+            "properties": {
+              "mediaUrl": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^https?:\\/\\/.+"
+              }
+            }
+          },
+          "then": {
+            "required": ["stimulusType", "stimulusIndex"]
+          }
+        }
+      ]
+    },
+    "questionBase": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "type"],
+      "properties": {
+        "name": { "$ref": "#/$defs/questionName" },
+        "type": {
+          "type": "string",
+          "enum": [
+            "SELECT",
+            "NUMERIC",
+            "OPEN-END",
+            "TEXT",
+            "GRID",
+            "GRID_HYBRID",
+            "QUOTA"
+          ]
+        },
+        "selectFormat": { "$ref": "#/$defs/selectFormatField" },
+        "header2": {
+          "oneOf": [{ "$ref": "#/$defs/nonEmptyString" }, { "type": "null" }]
+        },
+        "question": { "type": ["string", "null"] },
+        "list": {
+          "type": ["array", "null"],
+          "items": { "type": "string" }
+        },
+        "list_column": {
+          "type": ["array", "null"],
+          "items": { "type": "string" }
+        },
+        "logo": { "type": ["boolean", "null"] },
+        "logoRows": { "type": ["boolean", "null"] },
+        "logoColumns": { "type": ["boolean", "null"] },
+        "isRandomize": { "type": ["boolean", "null"] },
+        "isRandomize_row": { "type": ["boolean", "null"] },
+        "isRandomize_column": { "type": ["boolean", "null"] },
+        "reverse": { "type": ["boolean", "null"] },
+        "reverse_column": { "type": ["boolean", "null"] },
+        "isExclusive": {
+          "oneOf": [{ "$ref": "#/$defs/commaIndexList" }, { "type": "null" }]
+        },
+        "other": {
+          "oneOf": [{ "$ref": "#/$defs/commaIndexList" }, { "type": "null" }]
+        },
+        "timeout": {
+          "type": ["integer", "null"],
+          "minimum": 1
+        },
+        "isRequired": { "type": ["boolean", "null"] },
+        "minValue": { "$ref": "#/$defs/numericOrNumericArray" },
+        "maxValue": { "$ref": "#/$defs/numericOrNumericArray" },
+        "meta": { "$ref": "#/$defs/meta" },
+        "quota": {
+          "oneOf": [{ "$ref": "#/$defs/quotaConfig" }, { "type": "null" }]
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "type": { "const": "QUOTA" } },
+            "required": ["type"]
+          },
+          "then": {
+            "required": ["quota"],
+            "properties": {
+              "quota": { "$ref": "#/$defs/quotaConfig" }
+            }
+          }
+        },
+        {
+          "if": {
+            "not": {
+              "properties": { "type": { "const": "QUOTA" } },
+              "required": ["type"]
+            }
+          },
+          "then": {
+            "properties": {
+              "quota": { "type": "null" }
+            }
+          }
+        }
+      ]
+    },
+    "questionSelect": {
+      "allOf": [
+        { "$ref": "#/$defs/questionBase" },
+        {
+          "properties": {
+            "type": { "const": "SELECT" },
+            "selectFormat": { "enum": ["1", "2", null] },
+            "list": { "$ref": "#/$defs/listItems" }
+          },
+          "required": ["list"]
+        }
+      ]
+    },
+    "questionNumeric": {
+      "allOf": [
+        { "$ref": "#/$defs/questionBase" },
+        { "properties": { "type": { "const": "NUMERIC" } } }
+      ]
+    },
+    "questionOpenEnd": {
+      "allOf": [
+        { "$ref": "#/$defs/questionBase" },
+        { "properties": { "type": { "const": "OPEN-END" } } }
+      ]
+    },
+    "questionText": {
+      "allOf": [
+        { "$ref": "#/$defs/questionBase" },
+        { "properties": { "type": { "const": "TEXT" } } }
+      ]
+    },
+    "questionGrid": {
+      "allOf": [
+        { "$ref": "#/$defs/questionBase" },
+        {
+          "properties": {
+            "type": { "const": "GRID" },
+            "selectFormat": { "$ref": "#/$defs/selectFormatField" }
+          }
+        },
+        {
+          "if": {
+            "not": {
+              "properties": {
+                "meta": {
+                  "properties": {
+                    "widgetType": { "const": "click_coord" }
+                  },
+                  "required": ["widgetType"]
+                }
+              },
+              "required": ["meta"]
+            }
+          },
+          "then": {
+            "properties": {
+              "list": { "$ref": "#/$defs/listItems" },
+              "list_column": { "$ref": "#/$defs/listItems" }
+            },
+            "required": ["list", "list_column"]
+          }
+        }
+      ]
+    },
+    "questionGridHybrid": {
+      "allOf": [
+        { "$ref": "#/$defs/questionBase" },
+        {
+          "properties": {
+            "type": { "const": "GRID_HYBRID" },
+            "list": { "$ref": "#/$defs/listItems" },
+            "selectFormat": { "$ref": "#/$defs/selectFormatField" }
+          },
+          "required": ["list"]
+        },
+        {
+          "if": {
+            "properties": {
+              "selectFormat": { "type": "array" }
+            },
+            "required": ["selectFormat"]
+          },
+          "then": {
+            "anyOf": [
+              {
+                "properties": {
+                  "selectFormat": {
+                    "type": "array",
+                    "minItems": 2,
+                    "maxItems": 2,
+                    "prefixItems": [
+                      { "enum": ["NUMERIC", "OPEN-END"] },
+                      { "const": "2" }
+                    ]
+                  }
+                }
+              },
+              {
+                "properties": {
+                  "selectFormat": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": { "enum": ["NUMERIC", "OPEN-END"] }
+                  }
+                }
+              }
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "minValue": { "type": "array" }
+            },
+            "required": ["minValue"]
+          },
+          "then": {
+            "properties": {
+              "selectFormat": {
+                "oneOf": [
+                  { "const": "NUMERIC" },
+                  {
+                    "type": "array",
+                    "items": { "const": "NUMERIC" }
+                  },
+                  {
+                    "type": "array",
+                    "minItems": 2,
+                    "maxItems": 2,
+                    "prefixItems": [{ "const": "NUMERIC" }, { "const": "2" }]
+                  }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "maxValue": { "type": "array" }
+            },
+            "required": ["maxValue"]
+          },
+          "then": {
+            "properties": {
+              "selectFormat": {
+                "oneOf": [
+                  { "const": "NUMERIC" },
+                  {
+                    "type": "array",
+                    "items": { "const": "NUMERIC" }
+                  },
+                  {
+                    "type": "array",
+                    "minItems": 2,
+                    "maxItems": 2,
+                    "prefixItems": [{ "const": "NUMERIC" }, { "const": "2" }]
+                  }
+                ]
+              }
+            }
+          }
+        }
+      ]
+    },
+    "questionQuota": {
+      "allOf": [
+        { "$ref": "#/$defs/questionBase" },
+        {
+          "properties": {
+            "type": { "const": "QUOTA" },
+            "quota": { "$ref": "#/$defs/quotaConfig" }
+          },
+          "required": ["quota"]
+        }
+      ]
+    },
+    "question": {
+      "oneOf": [
+        { "$ref": "#/$defs/questionSelect" },
+        { "$ref": "#/$defs/questionNumeric" },
+        { "$ref": "#/$defs/questionOpenEnd" },
+        { "$ref": "#/$defs/questionText" },
+        { "$ref": "#/$defs/questionGrid" },
+        { "$ref": "#/$defs/questionGridHybrid" },
+        { "$ref": "#/$defs/questionQuota" }
+      ]
+    }
+  }
+}

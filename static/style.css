@@ -136,6 +136,13 @@ header.page p {
   border-bottom: 2px solid var(--accent-pink-dim);
 }
 
+.import-box,
+.ssi-panel {
+  margin-top: 1.25rem;
+  padding-top: 1rem;
+  border-top: 1px dashed var(--border);
+}
+
 label.lbl {
   display: block;
   font-size: 0.88rem;
@@ -165,6 +172,15 @@ textarea:focus {
 }
 
 textarea { max-width: 100%; min-height: 72px; resize: vertical; }
+
+.json-out {
+  min-height: 340px;
+  max-width: 100%;
+  width: 100%;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
 
 .grid2 {
   display: grid;
@@ -224,6 +240,33 @@ textarea { max-width: 100%; min-height: 72px; resize: vertical; }
   border-radius: 0 8px 8px 0;
   font-size: 0.9rem;
   color: #4a4035;
+}
+
+.msg-box {
+  margin: 0.75rem 0;
+  padding: 0.85rem 1rem;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+}
+
+.msg-box ul {
+  margin: 0.55rem 0 0;
+  padding-left: 1.2rem;
+}
+
+.msg-box.ok {
+  background: #eefbf4;
+  border-color: #9fd3b1;
+}
+
+.msg-box.warn {
+  background: #fff6ea;
+  border-color: #e9ab7b;
+}
+
+.msg-box.err {
+  background: #fff0f0;
+  border-color: #dd8c8c;
 }
 
 .actions {

@@ -1,0 +1,11 @@
+[
+  {
+    "name": "numericQuestion",
+    "type": "NUMERIC",
+    "selectFormat": null,
+    "header2": "Сколько Вам исполнилось полных лет?",
+    "question": null,
+    "minValue": 1,
+    "maxValue": 99
+  }
+]

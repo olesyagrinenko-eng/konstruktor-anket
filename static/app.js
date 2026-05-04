@@ -21,6 +21,15 @@
   let selectedExtraTemplates = new Map();
   /** @type {object | null} */
   let currentSpec = null;
+  /** @type {Array<object> | null} */
+  let currentQuestionnaire = null;
+  /** @type {object | null} */
+  let currentValidation = null;
+  /** @type {Array<string>} */
+  let currentWarnings = [];
+  /** @type {Array<string>} */
+  let currentImportWarnings = [];
+  let ssiDirty = false;
 
   const STIMULUS_TYPES = [
     ["video", "cVideo", "Ролик"],
@@ -43,6 +52,38 @@
     }
     el.textContent = msg;
     el.classList.remove("hidden");
+  }
+
+  function renderSsiMessages(validation, warnings, importWarnings) {
+    const host = $("#ssiMessages");
+    if (!host) return;
+    const warnList = [...(importWarnings || []), ...(warnings || [])];
+    let html = "";
+    if (warnList.length) {
+      html += `<div class="msg-box warn"><strong>Замечания</strong><ul>${warnList
+        .map((x) => `<li>${escapeHtml(x)}</li>`)
+        .join("")}</ul></div>`;
+    }
+    if (validation) {
+      if (validation.ok) {
+        html += `<div class="msg-box ok"><strong>Схема пройдена.</strong> JSON соответствует текущей SSI schema.</div>`;
+      } else {
+        html += `<div class="msg-box err"><strong>Ошибки схемы</strong><ul>${(validation.errors || [])
+          .map((x) => `<li><code>${escapeHtml(x.path || "$")}</code> — ${escapeHtml(x.message || "")}</li>`)
+          .join("")}</ul></div>`;
+      }
+    }
+    if (!html) {
+      html = '<p class="hint">После сборки здесь появятся результаты проверки схемы и замечания по импорту.</p>';
+    }
+    host.innerHTML = html;
+  }
+
+  function setSsiTextarea(questionnaire) {
+    const el = $("#ssiJsonOut");
+    if (!el) return;
+    el.value = questionnaire ? JSON.stringify(questionnaire, null, 2) : "";
+    ssiDirty = false;
   }
 
   function getPhase() {
@@ -344,6 +385,11 @@
     selectedTemplates = new Map();
     selectedExtraTemplates = new Map();
     currentSpec = null;
+    currentQuestionnaire = null;
+    currentValidation = null;
+    currentWarnings = [];
+    currentImportWarnings = [];
+    ssiDirty = false;
     const host = $("#groupChecks");
     if (host) host.innerHTML = "";
     const exh = $("#extraChecks");
@@ -355,6 +401,8 @@
       specOut.innerHTML =
         '<p class="hint">Нет данных. Пройдите шаги 1–4 и нажмите «Собрать и перейти к структуре».</p>';
     }
+    setSsiTextarea(null);
+    renderSsiMessages(null, [], []);
     try {
       await goStep(1);
     } catch (e) {
@@ -775,6 +823,26 @@
     });
   }
 
+  async function refreshSsiFromSpec() {
+    if (!currentSpec) return;
+    const r = await fetch(apiUrl("/api/convert/ssi-json"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(currentSpec),
+      credentials: "same-origin",
+      cache: "no-store",
+    });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      throw new Error(data.error || "Ошибка конвертации в SSI JSON");
+    }
+    currentQuestionnaire = data.questionnaire || null;
+    currentValidation = data.validation || null;
+    currentWarnings = data.warnings || [];
+    setSsiTextarea(currentQuestionnaire);
+    renderSsiMessages(currentValidation, currentWarnings, currentImportWarnings);
+  }
+
   async function runBuild() {
     showErr("");
     const payload = buildPayload();
@@ -790,13 +858,52 @@
       return;
     }
     currentSpec = await r.json();
+    currentImportWarnings = [];
     renderSpec();
+    await refreshSsiFromSpec();
+  }
+
+  async function importDocx() {
+    const input = $("#docxImportFile");
+    const file = input && input.files && input.files[0];
+    if (!file) {
+      showErr("Выберите .docx файл для импорта.");
+      return;
+    }
+    const fd = new FormData();
+    fd.append("file", file);
+    const r = await fetch(apiUrl("/api/import/docx"), {
+      method: "POST",
+      body: fd,
+      credentials: "same-origin",
+      cache: "no-store",
+    });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      showErr(data.error || "Ошибка импорта Word");
+      return;
+    }
+    currentSpec = data.spec || null;
+    currentQuestionnaire = data.questionnaire || null;
+    currentValidation = data.validation || null;
+    currentWarnings = data.warnings || [];
+    currentImportWarnings = data.importWarnings || [];
+
+    if (currentSpec && currentSpec.meta && currentSpec.meta.project_name) {
+      const pn = $("#projectName");
+      if (pn) pn.value = currentSpec.meta.project_name;
+    }
+    renderSpec();
+    setSsiTextarea(currentQuestionnaire);
+    renderSsiMessages(currentValidation, currentWarnings, currentImportWarnings);
+    await goStep(5);
   }
 
   async function exportDocx() {
     if (!currentSpec) return;
     try {
       readSpecFromDom();
+      await refreshSsiFromSpec();
     } catch (e) {
       console.error(e);
       showErr("Не удалось прочитать правки из таблицы. Проверьте, что все строки заполнены корректно.");
@@ -860,6 +967,67 @@
       stimulus: null,
     });
     renderSpec();
+    await refreshSsiFromSpec();
+  }
+
+  async function validateSsiJson() {
+    const el = $("#ssiJsonOut");
+    if (!el) return;
+    if (!ssiDirty && currentSpec) {
+      readSpecFromDom();
+      await refreshSsiFromSpec();
+    }
+    const r = await fetch(apiUrl("/api/validate/ssi-json"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ raw_text: el.value }),
+      credentials: "same-origin",
+      cache: "no-store",
+    });
+    const data = await r.json().catch(() => ({}));
+    currentValidation = data;
+    renderSsiMessages(currentValidation, currentWarnings, currentImportWarnings);
+  }
+
+  async function exportSsiJson() {
+    const el = $("#ssiJsonOut");
+    if (!el) return;
+    if (!ssiDirty && currentSpec) {
+      readSpecFromDom();
+      await refreshSsiFromSpec();
+    }
+    const filename = ($("#projectName") && $("#projectName").value.trim()) || "contractor-ssi-questionnaire";
+    const r = await fetch(apiUrl("/api/export/ssi-json"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ raw_text: el.value, filename }),
+      credentials: "same-origin",
+      cache: "no-store",
+    });
+    if (!r.ok) {
+      const j = await r.json().catch(() => ({}));
+      showErr(j.error || "Ошибка экспорта SSI JSON");
+      return;
+    }
+    const blob = await r.blob();
+    const cd = r.headers.get("Content-Disposition");
+    let name = "contractor-ssi-questionnaire.json";
+    if (cd && cd.includes("filename=")) {
+      const m = cd.match(/filename\*?=(?:UTF-8'')?["']?([^"';]+)/i);
+      if (m) name = decodeURIComponent(m[1]);
+    }
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = name;
+    a.rel = "noopener";
+    a.style.cssText = "position:fixed;left:-9999px;top:0;width:1px;height:1px;opacity:0;pointer-events:none;";
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => {
+      URL.revokeObjectURL(url);
+      if (a.parentNode) a.parentNode.removeChild(a);
+    }, 4000);
   }
 
   document.addEventListener("DOMContentLoaded", async () => {
@@ -931,6 +1099,22 @@
 
     const be = $("#btnExport");
     if (be) be.addEventListener("click", () => exportDocx().catch((e) => showErr(e.message || "Ошибка экспорта")));
+
+    const bimp = $("#btnImportDocx");
+    if (bimp) bimp.addEventListener("click", () => importDocx().catch((e) => showErr(e.message || "Ошибка импорта")));
+
+    const bvs = $("#btnValidateSsi");
+    if (bvs) bvs.addEventListener("click", () => validateSsiJson().catch((e) => showErr(e.message || "Ошибка валидации")));
+
+    const bjs = $("#btnExportSsi");
+    if (bjs) bjs.addEventListener("click", () => exportSsiJson().catch((e) => showErr(e.message || "Ошибка экспорта JSON")));
+
+    const ssiOut = $("#ssiJsonOut");
+    if (ssiOut) {
+      ssiOut.addEventListener("input", () => {
+        ssiDirty = true;
+      });
+    }
 
     const ba = $("#btnAddQ");
     if (ba) ba.addEventListener("click", () => addCustomQuestion().catch(console.error));

@@ -1,0 +1,157 @@
+[
+  {
+    "name": "QIntro",
+    "type": "TEXT",
+    "selectFormat": null,
+    "header2": "Здравствуйте! Приглашаем вас принять участие в исследовании о повседневных покупках.",
+    "question": "Опрос займет около 10 минут."
+  },
+  {
+    "name": "QGender",
+    "type": "SELECT",
+    "selectFormat": "1",
+    "header2": "Укажите ваш пол",
+    "question": "Один ответ",
+    "list": [
+      "Мужской",
+      "Женский"
+    ]
+  },
+  {
+    "name": "QAge",
+    "type": "NUMERIC",
+    "selectFormat": null,
+    "header2": "Сколько вам полных лет?",
+    "minValue": 18,
+    "maxValue": 65
+  },
+  {
+    "name": "QQuotaMain",
+    "type": "QUOTA",
+    "quota": {
+      "cells": [
+        {
+          "cellLimit": 120,
+          "condition": "QGender=1 And QAge>=18 And QAge<=34",
+          "label": "Мужчины 18–34"
+        },
+        {
+          "cellLimit": 120,
+          "condition": "QGender=2 And QAge>=18 And QAge<=34",
+          "label": "Женщины 18–34"
+        },
+        {
+          "cellLimit": 120,
+          "condition": "QGender=1 And QAge>=35 And QAge<=65",
+          "label": "Мужчины 35–65"
+        },
+        {
+          "cellLimit": 120,
+          "condition": "QGender=2 And QAge>=35 And QAge<=65",
+          "label": "Женщины 35–65"
+        }
+      ]
+    }
+  },
+  {
+    "name": "QBankProducts",
+    "type": "SELECT",
+    "selectFormat": "2",
+    "header2": "Какими банковскими продуктами вы пользуетесь сейчас?",
+    "question": "Выберите все подходящие варианты",
+    "list": [
+      "Дебетовая карта",
+      "Кредитная карта",
+      "Сберегательный счет",
+      "Вклад",
+      "Кредит наличными",
+      "Ипотека",
+      "Другое",
+      "Ничем из перечисленного"
+    ],
+    "isRandomize": true,
+    "isExclusive": "8",
+    "other": "7"
+  },
+
+  {
+    "name": "QOpenFeedback",
+    "type": "OPEN-END",
+    "selectFormat": null,
+    "header2": "Что вам больше всего нравится в вашем основном банке?"
+  },
+  {
+    "name": "QChannelUsage",
+    "type": "GRID",
+    "selectFormat": "1",
+    "header2": "Как часто вы используете следующие каналы обслуживания?",
+    "question": "Отметьте один ответ в каждой строке",
+    "list": [
+      "Мобильное приложение",
+      "Интернет-банк на компьютере",
+      "Отделение банка",
+      "Банкомат"
+    ],
+    "list_column": [
+      "Почти каждый день",
+      "Несколько раз в неделю",
+      "Несколько раз в месяц",
+      "Раз в несколько месяцев",
+      "Никогда"
+    ],
+    "isRandomize_row": true
+  },
+  {
+    "name": "QAppClick",
+    "type": "GRID",
+    "selectFormat": "1",
+    "header2": "Отметьте до 3 зон экрана приложения, которые первыми привлекли внимание",
+    "list": [
+      "1",
+      "2",
+      "3"
+    ],
+    "list_column": [
+      ""
+    ],
+    "meta": {
+      "widgetType": "click_coord",
+      "mediaUrl": "https://st.srv.kg/binary/Realweb-2604/AD/1.jpg",
+      "maxPoints": 3,
+      "stimulusType": "layout",
+      "stimulusIndex": 1
+    }
+  },
+  {
+    "name": "QMonthSpend",
+    "type": "GRID_HYBRID",
+    "selectFormat": "NUMERIC",
+    "header2": "Сколько примерно вы тратите в месяц по категориям?",
+    "question": "Введите сумму в рублях по каждой строке",
+    "list": [
+      "Продукты",
+      "Транспорт",
+      "Развлечения"
+    ],
+    "minValue": 0,
+    "maxValue": 500000
+  },
+  {
+    "name": "QBrandsRecall",
+    "type": "GRID_HYBRID",
+    "selectFormat": [
+      "OPEN-END",
+      "2"
+    ],
+    "header2": "Какие бренды банков вы можете вспомнить?",
+    "question": "Впишите одно название в каждой строке",
+    "list": [
+      "",
+      "",
+      "",
+      "",
+      "Затрудняюсь ответить"
+    ],
+    "isExclusive": "5"
+  }
+]

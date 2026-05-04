@@ -43,6 +43,15 @@
         <label><input type="radio" name="phase" value="pre" checked> Претест (до кампании)</label>
         <label><input type="radio" name="phase" value="post"> Посттест (после кампании)</label>
       </div>
+
+      <div class="import-box">
+        <h3 class="subh">Импорт из Word</h3>
+        <p class="hint">Если у вас уже есть анкета в `.docx`, можно сразу загрузить её, распознать структуру и перейти к правке с последующей выгрузкой в SSI JSON.</p>
+        <div class="actions">
+          <input type="file" id="docxImportFile" accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document">
+          <button type="button" class="secondary accent" id="btnImportDocx">Импортировать Word</button>
+        </div>
+      </div>
     </section>
 
     <!-- Шаг 2 -->
@@ -100,12 +109,20 @@
       <div class="actions">
         <button type="button" class="primary" id="btnRebuild">Пересобрать из шагов 1–4</button>
         <button type="button" class="secondary accent" id="btnExport">Скачать DOCX</button>
+        <button type="button" class="secondary accent" id="btnValidateSsi">Проверить SSI JSON</button>
+        <button type="button" class="secondary accent" id="btnExportSsi">Скачать SSI JSON</button>
         <button type="button" class="secondary" id="btnAddQ">Добавить свой вопрос</button>
         <button type="button" class="secondary btn-reset" id="btnResetWizardStep5" title="Очистить форму и вернуться к шагу 1">
           Сбросить и начать заново
         </button>
       </div>
       <div id="specOut"></div>
+      <div class="ssi-panel">
+        <h3 class="subh">SSI JSON</h3>
+        <p class="hint">Ниже — итоговый JSON для импорта в Sawtooth/SSIGen. Его можно подправить вручную, затем перепроверить по схеме и скачать.</p>
+        <div id="ssiMessages"></div>
+        <textarea id="ssiJsonOut" class="json-out" spellcheck="false" placeholder="Здесь появится SSI JSON после сборки или импорта Word"></textarea>
+      </div>
     </section>
 
     <div class="actions" id="navActions">
