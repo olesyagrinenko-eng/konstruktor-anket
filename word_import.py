@@ -11,7 +11,8 @@ from zipfile import ZipFile
 
 
 NS = {"w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"}
-QUESTION_START_RE = re.compile(r"^(?:Q\s*)?(\d+)[\.\)]\s*(.+)$", re.I)
+QUESTION_START_RE = re.compile(r"^(?:Q\s*)?(\d+)\.\s*(.+)$", re.I)
+CODE_ONLY_RE = re.compile(r"^Q[A-Za-z0-9_]{1,23}$")
 OPTION_RE = re.compile(r"^(\d+)\)\s*(.+)$")
 URL_RE = re.compile(r"https?://\S+", re.I)
 
@@ -52,6 +53,99 @@ def _read_docx_elements(blob: bytes) -> list[tuple[str, Any]]:
 def _is_instruction_start(text: str) -> bool:
     low = text.lower()
     return low.startswith("экран ") or low.startswith("далее будет представлен") or "клик тест" in low
+
+
+def _is_property_line(text: str) -> bool:
+    low = text.lower()
+    prefixes = (
+        "текст:",
+        "тип:",
+        "варианты:",
+        "перемешивать ответы:",
+        "эксклюзивные:",
+        "открытые варианты:",
+        "заметка:",
+        "minimum:",
+        "maximum:",
+        "минимум:",
+        "максимум:",
+        "левый якорь:",
+        "правый якорь:",
+        "mediaurl:",
+        "stimulustype:",
+        "stimulusindex:",
+        "максимум точек:",
+        "этап:",
+        "название проекта:",
+    )
+    return low.startswith(prefixes)
+
+
+def _parse_structured_item(item: dict[str, Any], serial: int) -> dict[str, Any]:
+    code = item.get("code") or f"IMP{serial:03d}"
+    props: dict[str, str] = {}
+    options: list[str] = []
+    notes: list[str] = []
+    for line in item.get("lines") or []:
+        if OPTION_RE.match(line):
+            options.append(OPTION_RE.match(line).group(2).strip())  # type: ignore[union-attr]
+            continue
+        if ":" in line:
+            key, value = line.split(":", 1)
+            props[key.strip().lower()] = value.strip()
+        else:
+            notes.append(line)
+
+    qtype_raw = props.get("тип", "").lower()
+    qtype = {
+        "инструкция": "instruction",
+        "открытый": "open",
+        "число": "open_numeric",
+        "один из списка": "single",
+        "несколько из списка": "multi",
+        "шкала": "scale_1_9" if str(props.get("максимум", "9")).strip() != "5" else "scale_1_5",
+        "клик-тест": "click_map",
+    }.get(qtype_raw, "instruction")
+    payload: dict[str, Any] = {
+        "id": code,
+        "qtype": qtype,
+        "text": props.get("текст") or item.get("title") or code,
+        "programmer_note": "\n".join(
+            [props.get("заметка", "").strip(), *[x for x in notes if x.strip()]]
+        ).strip(),
+        "options": options or None,
+        "anchors": None,
+        "stimulus": None,
+    }
+    if props.get("левый якорь") or props.get("правый якорь"):
+        max_key = "5" if qtype == "scale_1_5" else "9"
+        payload["anchors"] = {
+            "1": props.get("левый якорь", ""),
+            max_key: props.get("правый якорь", ""),
+        }
+    if props.get("минимум"):
+        payload["min_value"] = int(props["минимум"])
+    if props.get("максимум"):
+        payload["max_value"] = int(props["максимум"])
+    if (props.get("перемешивать ответы") or "").lower() in {"да", "true", "1"}:
+        payload["is_randomize"] = True
+    if props.get("эксклюзивные"):
+        payload["is_exclusive"] = props["эксклюзивные"]
+    if props.get("открытые варианты"):
+        payload["other"] = props["открытые варианты"]
+    if props.get("максимум точек"):
+        payload["max_points"] = int(props["максимум точек"])
+    media_url = props.get("mediaurl")
+    stimulus_type = props.get("stimulustype")
+    stimulus_index = props.get("stimulusindex")
+    if media_url or stimulus_type or stimulus_index:
+        payload["stimulus"] = {
+            "type": stimulus_type or "layout",
+            "index": int(stimulus_index or 1),
+        }
+        if media_url:
+            payload["stimulus"]["asset_url"] = media_url
+    return payload
 
 
 def _infer_qtype(text: str, lines: list[str]) -> str:
@@ -121,6 +215,8 @@ def _make_item(kind: str, title: str, number: str | None = None) -> dict[str, An
 
 
 def _finalize_item(item: dict[str, Any], serial: int) -> dict[str, Any]:
+    if item.get("kind") == "structured":
+        return _parse_structured_item(item, serial)
     text = item["title"].strip()
     lines = [line.strip() for line in item.get("lines") or [] if line.strip()]
     qtype = _infer_qtype(text, lines) if item["kind"] != "instruction" else "instruction"
@@ -201,11 +297,25 @@ def import_docx_to_spec(blob: bytes, filename: str) -> tuple[dict[str, Any], lis
         text = str(value).strip()
         if not text:
             continue
+        if current and current.get("kind") == "structured":
+            if CODE_ONLY_RE.match(text):
+                push_current()
+                current = {"kind": "structured", "code": text.strip(), "title": text.strip(), "lines": []}
+                continue
+            current["lines"].append(text)
+            continue
         if serial == 0 and not current and not QUESTION_START_RE.match(text):
+            if CODE_ONLY_RE.match(text):
+                current = {"kind": "structured", "code": text.strip(), "title": text.strip(), "lines": []}
+                continue
             if not intro_notes:
                 project_name = text
             else:
                 intro_notes.append(text)
+            continue
+
+        if current and OPTION_RE.match(text):
+            current["lines"].append(text)
             continue
 
         question_m = QUESTION_START_RE.match(text)
@@ -214,9 +324,18 @@ def import_docx_to_spec(blob: bytes, filename: str) -> tuple[dict[str, Any], lis
             current = _make_item("question", question_m.group(2), question_m.group(1))
             continue
 
+        if CODE_ONLY_RE.match(text):
+            push_current()
+            current = {"kind": "structured", "code": text.strip(), "title": text.strip(), "lines": []}
+            continue
+
         if _is_instruction_start(text):
             push_current()
             current = _make_item("instruction", text)
+            continue
+
+        if current and _is_property_line(text):
+            current["lines"].append(text)
             continue
 
         if current:

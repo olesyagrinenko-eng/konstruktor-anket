@@ -125,6 +125,11 @@ def index():
     return render_template("index.html")
 
 
+@app.route("/preview")
+def preview():
+    return render_template("preview.html")
+
+
 def _template_preview(t: dict) -> dict:
     return {
         "tid": t.get("tid"),

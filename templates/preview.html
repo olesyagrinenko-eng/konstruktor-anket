@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <title>Preview анкеты</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v={{ asset_version }}">
+</head>
+<body class="preview-page-body">
+  <div class="wrap">
+    <header class="page">
+      <h1>Preview анкеты</h1>
+      <p>Отдельная страница предпросмотра по текущему SSI JSON.</p>
+    </header>
+    <section class="panel">
+      <div class="actions">
+        <button type="button" class="secondary accent" id="btnStandaloneRespondent">Респондент</button>
+        <button type="button" class="secondary" id="btnStandaloneDebug">Debug</button>
+      </div>
+      <div id="standalonePreviewStatus" class="hint"></div>
+      <div id="standalonePreviewNav" class="preview-nav hidden">
+        <button type="button" class="secondary" id="btnStandalonePrev">Назад</button>
+        <span id="standalonePreviewCounter" class="preview-counter"></span>
+        <button type="button" class="primary" id="btnStandaloneNext">Далее</button>
+      </div>
+      <div id="standalonePreviewHost" class="preview-shell"></div>
+    </section>
+  </div>
+  <script src="{{ url_for('static', filename='preview.js') }}?v={{ asset_version }}" defer></script>
+</body>
+</html>

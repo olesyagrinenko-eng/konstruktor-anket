@@ -124,6 +124,22 @@
         <div id="ssiMessages"></div>
         <textarea id="ssiJsonOut" class="json-out" spellcheck="false" placeholder="Здесь появится SSI JSON после сборки или импорта Word"></textarea>
       </div>
+      <div class="ssi-panel">
+        <h3 class="subh">Превью анкеты</h3>
+        <p class="hint">Превью строится по текущему `SSI JSON`. Обычный режим показывает анкету как для респондента, debug — служебные поля и структуру.</p>
+        <div class="actions">
+          <button type="button" class="secondary accent" id="btnPreviewRespondent">Превью</button>
+          <button type="button" class="secondary" id="btnPreviewDebug">Дебаг-превью</button>
+          <button type="button" class="secondary" id="btnPreviewOpenPage">Открыть на новой странице</button>
+        </div>
+        <div id="previewStatus" class="hint"></div>
+        <div id="previewNav" class="preview-nav hidden">
+          <button type="button" class="secondary" id="btnPreviewPrev">Назад</button>
+          <span id="previewCounter" class="preview-counter"></span>
+          <button type="button" class="primary" id="btnPreviewNext">Далее</button>
+        </div>
+        <div id="questionnairePreview" class="preview-shell"></div>
+      </div>
     </section>
 
     <div class="actions" id="navActions">

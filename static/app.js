@@ -30,6 +30,8 @@
   /** @type {Array<string>} */
   let currentImportWarnings = [];
   let ssiDirty = false;
+  let previewMode = "respondent";
+  let previewIndex = 0;
 
   const STIMULUS_TYPES = [
     ["video", "cVideo", "Ролик"],
@@ -61,6 +63,13 @@
     el.classList.toggle("import-error", !!isError);
   }
 
+  function setPreviewStatus(msg, isError) {
+    const el = $("#previewStatus");
+    if (!el) return;
+    el.textContent = msg || "";
+    el.classList.toggle("import-error", !!isError);
+  }
+
   function renderSsiMessages(validation, warnings, importWarnings) {
     const host = $("#ssiMessages");
     if (!host) return;
@@ -84,6 +93,153 @@
       html = '<p class="hint">После сборки здесь появятся результаты проверки схемы и замечания по импорту.</p>';
     }
     host.innerHTML = html;
+  }
+
+  function escapeAttr(s) {
+    return escapeHtml(s).replace(/"/g, "&quot;");
+  }
+
+  function listOrEmpty(items) {
+    return Array.isArray(items) ? items : [];
+  }
+
+  function renderRespondentQuestion(q, index) {
+    const title = escapeHtml(q.header2 || q.name || `Вопрос ${index + 1}`);
+    const note = q.question ? `<div class="preview-note">${escapeHtml(q.question)}</div>` : "";
+    const media = q.meta && q.meta.mediaUrl
+      ? `<div class="preview-media"><img src="${escapeAttr(q.meta.mediaUrl)}" alt="${title}"></div>`
+      : "";
+
+    if (q.type === "TEXT") {
+      return `<section class="preview-card preview-text">${media}<div class="preview-title">${title}</div>${note}<button type="button" class="preview-next">Далее</button></section>`;
+    }
+
+    if (q.type === "NUMERIC") {
+      const min = q.minValue != null ? ` min="${escapeAttr(q.minValue)}"` : "";
+      const max = q.maxValue != null ? ` max="${escapeAttr(q.maxValue)}"` : "";
+      return `<section class="preview-card">${media}<div class="preview-step">Вопрос ${index + 1}</div><div class="preview-title">${title}</div>${note}<input type="number" class="preview-input" placeholder="Введите число"${min}${max}><button type="button" class="preview-next">Далее</button></section>`;
+    }
+
+    if (q.type === "OPEN-END") {
+      return `<section class="preview-card">${media}<div class="preview-step">Вопрос ${index + 1}</div><div class="preview-title">${title}</div>${note}<textarea class="preview-textarea" placeholder="Введите ответ"></textarea><button type="button" class="preview-next">Далее</button></section>`;
+    }
+
+    if (q.type === "SELECT") {
+      const options = listOrEmpty(q.list);
+      const inputType = q.selectFormat === "2" ? "checkbox" : "radio";
+      const scaleAnchors = q.meta && q.meta.widgetType === "scale"
+        ? `<div class="preview-scale-anchors"><span>${escapeHtml(q.meta.minScaleAnchor || "")}</span><span>${escapeHtml(q.meta.maxScaleAnchor || "")}</span></div>`
+        : "";
+      const opts = options.map((opt, i) => {
+        const idx = String(i + 1);
+        const extra = [];
+        if ((q.other || "").split(",").includes(idx)) extra.push("Открытый");
+        if ((q.isExclusive || "").split(",").includes(idx)) extra.push("Эксклюзивный");
+        const meta = extra.length ? `<small>${escapeHtml(extra.join(" · "))}</small>` : "";
+        return `<label class="preview-option"><input type="${inputType}" name="${escapeAttr(q.name || `q_${index}`)}"><span>${escapeHtml(opt)}</span>${meta}</label>`;
+      }).join("");
+      return `<section class="preview-card">${media}<div class="preview-step">Вопрос ${index + 1}</div><div class="preview-title">${title}</div>${note}${scaleAnchors}<div class="preview-options">${opts}</div><button type="button" class="preview-next">Далее</button></section>`;
+    }
+
+    if (q.type === "GRID" && q.meta && q.meta.widgetType === "click_coord") {
+      return `<section class="preview-card">${media}<div class="preview-step">Вопрос ${index + 1}</div><div class="preview-title">${title}</div>${note}<div class="preview-clickmap">Клик-тест: до ${escapeHtml(q.meta.maxPoints || 3)} точек</div><button type="button" class="preview-next">Далее</button></section>`;
+    }
+
+    if (q.type === "GRID") {
+      const rows = listOrEmpty(q.list);
+      const cols = listOrEmpty(q.list_column);
+      const head = cols.map((c) => `<th>${escapeHtml(c)}</th>`).join("");
+      const body = rows.map((row) => {
+        const cells = cols.map(() => '<td><input type="radio" disabled></td>').join("");
+        return `<tr><th>${escapeHtml(row)}</th>${cells}</tr>`;
+      }).join("");
+      return `<section class="preview-card">${media}<div class="preview-step">Вопрос ${index + 1}</div><div class="preview-title">${title}</div>${note}<div class="preview-grid-wrap"><table class="preview-grid"><thead><tr><th></th>${head}</tr></thead><tbody>${body}</tbody></table></div><button type="button" class="preview-next">Далее</button></section>`;
+    }
+
+    if (q.type === "GRID_HYBRID") {
+      const rows = listOrEmpty(q.list);
+      const body = rows.map((row) => `<label class="preview-hybrid-row"><span>${escapeHtml(row || "Ответ")}</span><input type="text" class="preview-input"></label>`).join("");
+      return `<section class="preview-card">${media}<div class="preview-step">Вопрос ${index + 1}</div><div class="preview-title">${title}</div>${note}<div class="preview-hybrid">${body}</div><button type="button" class="preview-next">Далее</button></section>`;
+    }
+
+    return `<section class="preview-card"><div class="preview-step">Вопрос ${index + 1}</div><div class="preview-title">${title}</div>${note}<div class="preview-unknown">Нет рендера для типа ${escapeHtml(q.type || "unknown")}</div></section>`;
+  }
+
+  function renderDebugQuestion(q, index) {
+    const rows = [
+      ["name", q.name],
+      ["type", q.type],
+      ["selectFormat", q.selectFormat],
+      ["header2", q.header2],
+      ["question", q.question],
+      ["list", Array.isArray(q.list) ? q.list.join(" | ") : q.list],
+      ["list_column", Array.isArray(q.list_column) ? q.list_column.join(" | ") : q.list_column],
+      ["isRandomize", q.isRandomize],
+      ["isExclusive", q.isExclusive],
+      ["other", q.other],
+      ["minValue", Array.isArray(q.minValue) ? q.minValue.join(", ") : q.minValue],
+      ["maxValue", Array.isArray(q.maxValue) ? q.maxValue.join(", ") : q.maxValue],
+      ["meta", q.meta ? JSON.stringify(q.meta, null, 2) : ""],
+    ].filter(([, v]) => v !== undefined && v !== null && v !== "");
+    return `<section class="preview-card preview-debug-card"><div class="preview-step">Элемент ${index + 1}</div><div class="preview-title">${escapeHtml(q.header2 || q.name || `Item ${index + 1}`)}</div><div class="preview-debug-table">${rows.map(([k, v]) => `<div class="preview-debug-row"><strong>${escapeHtml(k)}</strong><pre>${escapeHtml(String(v))}</pre></div>`).join("")}</div></section>`;
+  }
+
+  function parsePreviewQuestionnaire() {
+    const src = $("#ssiJsonOut");
+    if (!src) return null;
+    let data;
+    try {
+      data = JSON.parse(src.value);
+    } catch (e) {
+      setPreviewStatus("Превью недоступно: в поле SSI JSON сейчас невалидный JSON.", true);
+      return null;
+    }
+    if (!Array.isArray(data)) {
+      setPreviewStatus("Превью недоступно: корень JSON должен быть массивом вопросов.", true);
+      return null;
+    }
+    return data;
+  }
+
+  function persistPreviewPayload(questionnaire) {
+    try {
+      localStorage.setItem("konstruktor-preview-json", JSON.stringify(questionnaire || []));
+    } catch (_) {
+      /* ignore */
+    }
+  }
+
+  function syncPreviewNav(total) {
+    const nav = $("#previewNav");
+    const counter = $("#previewCounter");
+    const prev = $("#btnPreviewPrev");
+    const next = $("#btnPreviewNext");
+    if (!nav || !counter || !prev || !next) return;
+    nav.classList.toggle("hidden", total <= 1);
+    counter.textContent = total ? `Экран ${previewIndex + 1} из ${total}` : "";
+    prev.disabled = previewIndex <= 0;
+    next.disabled = previewIndex >= total - 1;
+  }
+
+  function renderQuestionnairePreview(mode, resetIndex) {
+    const host = $("#questionnairePreview");
+    if (!host) return;
+    const data = parsePreviewQuestionnaire();
+    if (!data) {
+      host.innerHTML = "";
+      syncPreviewNav(0);
+      return;
+    }
+    previewMode = mode || previewMode;
+    if (resetIndex) previewIndex = 0;
+    previewIndex = Math.max(0, Math.min(previewIndex, Math.max(0, data.length - 1)));
+    persistPreviewPayload(data);
+    const q = data[previewIndex];
+    host.innerHTML = q
+      ? (previewMode === "debug" ? renderDebugQuestion(q, previewIndex) : renderRespondentQuestion(q, previewIndex))
+      : '<p class="hint">В JSON пока нет вопросов для превью.</p>';
+    syncPreviewNav(data.length);
+    setPreviewStatus(previewMode === "debug" ? "Показан debug preview по текущему SSI JSON." : "Показано пользовательское превью по текущему SSI JSON.", false);
   }
 
   function setSsiTextarea(questionnaire) {
@@ -848,6 +1004,7 @@
     currentWarnings = data.warnings || [];
     setSsiTextarea(currentQuestionnaire);
     renderSsiMessages(currentValidation, currentWarnings, currentImportWarnings);
+    renderQuestionnairePreview("respondent", true);
   }
 
   async function runBuild() {
@@ -906,6 +1063,7 @@
     renderSpec();
     setSsiTextarea(currentQuestionnaire);
     renderSsiMessages(currentValidation, currentWarnings, currentImportWarnings);
+    renderQuestionnairePreview("respondent", true);
     setDocxImportStatus(`Импорт завершён: ${file.name}`, false);
     await goStep(5);
   }
@@ -998,6 +1156,7 @@
     const data = await r.json().catch(() => ({}));
     currentValidation = data;
     renderSsiMessages(currentValidation, currentWarnings, currentImportWarnings);
+    renderQuestionnairePreview("respondent", false);
   }
 
   async function exportSsiJson() {
@@ -1136,6 +1295,41 @@
 
     const bjs = $("#btnExportSsi");
     if (bjs) bjs.addEventListener("click", () => exportSsiJson().catch((e) => showErr(e.message || "Ошибка экспорта JSON")));
+
+    const bpv = $("#btnPreviewRespondent");
+    if (bpv) bpv.addEventListener("click", () => renderQuestionnairePreview("respondent", true));
+
+    const bpd = $("#btnPreviewDebug");
+    if (bpd) bpd.addEventListener("click", () => renderQuestionnairePreview("debug", true));
+
+    const bpo = $("#btnPreviewOpenPage");
+    if (bpo) {
+      bpo.addEventListener("click", () => {
+        const data = parsePreviewQuestionnaire();
+        if (!data) return;
+        persistPreviewPayload(data);
+        const mode = previewMode === "debug" ? "debug" : "respondent";
+        window.open(apiUrl(`/preview?mode=${mode}`), "_blank", "noopener");
+      });
+    }
+
+    const bpp = $("#btnPreviewPrev");
+    if (bpp) {
+      bpp.addEventListener("click", () => {
+        previewIndex = Math.max(0, previewIndex - 1);
+        renderQuestionnairePreview(previewMode, false);
+      });
+    }
+
+    const bpn = $("#btnPreviewNext");
+    if (bpn) {
+      bpn.addEventListener("click", () => {
+        const data = parsePreviewQuestionnaire();
+        if (!data) return;
+        previewIndex = Math.min(data.length - 1, previewIndex + 1);
+        renderQuestionnairePreview(previewMode, false);
+      });
+    }
 
     const ssiOut = $("#ssiJsonOut");
     if (ssiOut) {
