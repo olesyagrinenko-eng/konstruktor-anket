@@ -103,9 +103,72 @@
     return Array.isArray(items) ? items : [];
   }
 
+  function stripTechnicalTail(text) {
+    let out = String(text || "").trim();
+    out = out.replace(/\bQ\s*\d+\b[\.\:]?/gi, "").trim();
+    out = out.replace(/^\s*Экран\s+/i, "").trim();
+    out = out.replace(/\b(Открытый|Шкала|Один из списка|Несколько из списка|Клик[- ]?тест|Инструкция)\s*$/i, "").trim();
+    out = out.replace(/\s{2,}/g, " ").trim();
+    return out;
+  }
+
+  function cleanRespondentOption(text) {
+    let out = String(text || "").trim();
+    out = out.replace(/\s*-\s*закончить интервью.*$/i, "");
+    out = out.replace(/\s*-\s*отсев.*$/i, "");
+    return out.trim();
+  }
+
+  function isTechnicalInstruction(text) {
+    const low = String(text || "").toLowerCase().trim();
+    if (!low) return false;
+    const markers = [
+      "закончить интервью",
+      "для базы",
+      "закодировать",
+      "делим выборку",
+      "подвыборка",
+      "показываем",
+      "показать",
+      "рандомно",
+      "по схеме",
+      "q 50",
+      "q50",
+      "https://",
+      "mediaurl",
+      "stimulus",
+      "вопросы 36",
+      "один из списка",
+      "несколько из списка",
+      "шкала",
+      "клик тест",
+      "клик-тест",
+      "открытый",
+      "если меньше",
+      "если больше",
+      "для верификации",
+      "повторный клик",
+      "выборка |",
+    ];
+    if (markers.some((m) => low.includes(m))) return true;
+    if (/\|\s*/.test(low)) return true;
+    if (/^\d+\)$/.test(low)) return true;
+    return false;
+  }
+
+  function respondentNote(text) {
+    const raw = String(text || "").trim();
+    if (!raw) return "";
+    const lines = raw.split(/\n+/).map((x) => x.trim()).filter(Boolean);
+    const allowed = lines.filter((line) => !isTechnicalInstruction(line));
+    return allowed.join("\n").trim();
+  }
+
   function renderRespondentQuestion(q, index) {
-    const title = escapeHtml(q.header2 || q.name || `Вопрос ${index + 1}`);
-    const note = q.question ? `<div class="preview-note">${escapeHtml(q.question)}</div>` : "";
+    const cleanTitle = stripTechnicalTail(q.header2 || q.name || `Вопрос ${index + 1}`);
+    const title = escapeHtml(cleanTitle || q.name || `Вопрос ${index + 1}`);
+    const visibleNote = respondentNote(q.question);
+    const note = visibleNote ? `<div class="preview-note">${escapeHtml(visibleNote)}</div>` : "";
     const media = q.meta && q.meta.mediaUrl
       ? `<div class="preview-media"><img src="${escapeAttr(q.meta.mediaUrl)}" alt="${title}"></div>`
       : "";
@@ -125,7 +188,7 @@
     }
 
     if (q.type === "SELECT") {
-      const options = listOrEmpty(q.list);
+      const options = listOrEmpty(q.list).map(cleanRespondentOption).filter(Boolean);
       const inputType = q.selectFormat === "2" ? "checkbox" : "radio";
       const scaleAnchors = q.meta && q.meta.widgetType === "scale"
         ? `<div class="preview-scale-anchors"><span>${escapeHtml(q.meta.minScaleAnchor || "")}</span><span>${escapeHtml(q.meta.maxScaleAnchor || "")}</span></div>`
