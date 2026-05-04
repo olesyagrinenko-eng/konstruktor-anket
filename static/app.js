@@ -54,6 +54,13 @@
     el.classList.remove("hidden");
   }
 
+  function setDocxImportStatus(msg, isError) {
+    const el = $("#docxImportStatus");
+    if (!el) return;
+    el.textContent = msg || "";
+    el.classList.toggle("import-error", !!isError);
+  }
+
   function renderSsiMessages(validation, warnings, importWarnings) {
     const host = $("#ssiMessages");
     if (!host) return;
@@ -868,8 +875,10 @@
     const file = input && input.files && input.files[0];
     if (!file) {
       showErr("Выберите .docx файл для импорта.");
+      setDocxImportStatus("Файл не выбран.", true);
       return;
     }
+    setDocxImportStatus(`Загружаю: ${file.name}`, false);
     const fd = new FormData();
     fd.append("file", file);
     const r = await fetch(apiUrl("/api/import/docx"), {
@@ -881,6 +890,7 @@
     const data = await r.json().catch(() => ({}));
     if (!r.ok) {
       showErr(data.error || "Ошибка импорта Word");
+      setDocxImportStatus(data.error || "Ошибка импорта Word", true);
       return;
     }
     currentSpec = data.spec || null;
@@ -896,6 +906,7 @@
     renderSpec();
     setSsiTextarea(currentQuestionnaire);
     renderSsiMessages(currentValidation, currentWarnings, currentImportWarnings);
+    setDocxImportStatus(`Импорт завершён: ${file.name}`, false);
     await goStep(5);
   }
 
@@ -1102,6 +1113,23 @@
 
     const bimp = $("#btnImportDocx");
     if (bimp) bimp.addEventListener("click", () => importDocx().catch((e) => showErr(e.message || "Ошибка импорта")));
+
+    const docxInput = $("#docxImportFile");
+    if (docxInput) {
+      docxInput.addEventListener("change", () => {
+        const file = docxInput.files && docxInput.files[0];
+        if (!file) {
+          setDocxImportStatus("", false);
+          return;
+        }
+        setDocxImportStatus(`Выбран файл: ${file.name}`, false);
+        importDocx().catch((e) => {
+          console.error(e);
+          showErr(e.message || "Ошибка импорта");
+          setDocxImportStatus(e.message || "Ошибка импорта", true);
+        });
+      });
+    }
 
     const bvs = $("#btnValidateSsi");
     if (bvs) bvs.addEventListener("click", () => validateSsiJson().catch((e) => showErr(e.message || "Ошибка валидации")));

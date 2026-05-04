@@ -269,6 +269,14 @@ textarea { max-width: 100%; min-height: 72px; resize: vertical; }
   border-color: #dd8c8c;
 }
 
+#docxImportStatus {
+  margin-top: 0.55rem;
+}
+
+.import-error {
+  color: #b42318;
+}
+
 .actions {
   display: flex;
   flex-wrap: wrap;

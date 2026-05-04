@@ -80,8 +80,38 @@ def _safe_json_filename(name: str) -> str:
     return f"{base}_{datetime.now().strftime('%Y%m%d_%H%M')}.json"
 
 
+def _absolutize_url(url: str | None) -> str | None:
+    if not url:
+        return url
+    if re.match(r"^https?://", url, flags=re.I):
+        return url
+    if url.startswith("/"):
+        return f"{request.url_root.rstrip('/')}{url}"
+    return url
+
+
+def _normalize_spec_urls(spec: dict) -> dict:
+    """Сделать ссылки на медиа абсолютными для SSI JSON."""
+    meta = spec.get("meta") or {}
+    assets = meta.get("stimulus_assets")
+    if isinstance(assets, dict):
+        for rows in assets.values():
+            if not isinstance(rows, list):
+                continue
+            for row in rows:
+                if isinstance(row, dict) and row.get("url"):
+                    row["url"] = _absolutize_url(row.get("url"))
+
+    for block in spec.get("blocks") or []:
+        for question in block.get("questions") or []:
+            stimulus = question.get("stimulus")
+            if isinstance(stimulus, dict) and stimulus.get("asset_url"):
+                stimulus["asset_url"] = _absolutize_url(stimulus.get("asset_url"))
+    return spec
+
+
 def _ssi_payload_from_spec(spec: dict) -> dict:
-    questionnaire, warnings = spec_to_ssi(spec)
+    questionnaire, warnings = spec_to_ssi(_normalize_spec_urls(spec))
     validation = validate_ssi_questionnaire(questionnaire)
     return {
         "questionnaire": questionnaire,
@@ -173,7 +203,8 @@ def api_upload_stimulus():
     path = os.path.join(_uploads_dir(), name)
     f.save(path)
     root = (request.script_root or "").rstrip("/")
-    url = f"{root}/static/uploads/{name}"
+    rel_url = f"{root}/static/uploads/{name}"
+    url = _absolutize_url(rel_url)
     return jsonify({"url": url, "filename": name})
 
 
